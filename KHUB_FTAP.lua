@@ -1,17 +1,14 @@
 --[[
 	Flings Things and People
 	KHUB Premium · Full Feature Build
-	Toggle: RightShift (library default may vary)
-	Key System: KHUB2 (same as Steal an Egg free PS)
+	Custom Key System · rotating keys + perm
 ]]
 
 repeat task.wait() until game:IsLoaded()
 
-local Players = game:GetService("Players")
-local TweenService = game:GetService("TweenService")
-local UserInputService = game:GetService("UserInputService")
+local Players     = game:GetService("Players")
 local HttpService = game:GetService("HttpService")
-local CoreGui = game:GetService("CoreGui")
+local CoreGui     = game:GetService("CoreGui")
 
 local LocalPlayer = Players.LocalPlayer
 if not LocalPlayer then
@@ -21,154 +18,51 @@ if not LocalPlayer then
 	LocalPlayer = Players.LocalPlayer
 end
 
-local DISCORD = "https://discord.gg/EKPb7BRDH8"
-local KEY_FILE = "KHUB_FTAP_Key_v2.json"
-local KEY_SECRET = "KHUB_STEALEGG_SECRET_v2"
-local REVOKED_URL = ""
+local DISCORD  = "https://discord.gg/EKPb7BRDH8"
+local KEY_FILE = "KHUB_FTAP_CustomKey.json"
 
-local function keyChecksum(str, secret)
-	local sum = 0
-	for i = 1, #str do
-		sum = (sum + string.byte(str, i) * i) % 65521
-	end
-	for i = 1, #secret do
-		sum = (sum + string.byte(secret, i) * (i + 7)) % 65521
-	end
-	return string.format("%04x", sum)
+-- Rotating keys (must be used in order when previous expires)
+-- index 1 = 24h, index 2 = 34h, index 3 = 34h, then back to 1
+local ROTATING = {
+	{ key = "Khub-=√π√|€¢£~`|÷§", hours = 24 },
+	{ key = "Khub=526864576&-#_+)/)+&:!;'$_-86326", hours = 34 },
+	{ key = "Khub-=j(-$9&/8_7683863573(64)7&+)-/-08_73(628", hours = 34 },
+}
+local PERM_KEY = "Kyielpogi"
+
+local function cleanKey(raw)
+	local t = tostring(raw or "")
+	t = string.gsub(t, "^%s+", "")
+	t = string.gsub(t, "%s+$", "")
+	t = string.gsub(t, "[\r\n\t]", "")
+	return t
 end
 
-local B64CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
-local B64MAP = {}
-for i = 1, 64 do
-	B64MAP[string.sub(B64CHARS, i, i)] = i - 1
+local function keysEqual(a, b)
+	return cleanKey(a) == cleanKey(b)
 end
 
-local function b64decode(data)
-	if type(data) ~= "string" or data == "" then
-		return nil
-	end
-	data = string.gsub(data, "%s+", "")
-	local ok, decoded = pcall(function()
-		if crypt and crypt.base64decode then
-			return crypt.base64decode(data)
-		end
-		if crypt and crypt.base64_decode then
-			return crypt.base64_decode(data)
-		end
-	end)
-	if ok and type(decoded) == "string" and #decoded > 0 then
-		return decoded
-	end
-	local out = {}
-	local buf, bits = 0, 0
-	for i = 1, #data do
-		local ch = string.sub(data, i, i)
-		if ch ~= "=" then
-			local v = B64MAP[ch]
-			if v == nil then
-				return nil
-			end
-			buf = buf * 64 + v
-			bits = bits + 6
-			if bits >= 8 then
-				bits = bits - 8
-				local byte = math.floor(buf / (2 ^ bits)) % 256
-				out[#out + 1] = string.char(byte)
-			end
-		end
-	end
-	return table.concat(out)
-end
-
-local function cleanKeyText(raw)
-	local text = tostring(raw or "")
-	text = string.gsub(text, "%s+", "")
-	text = string.gsub(text, "[\r\n\t%z]", "")
-	text = string.gsub(text, "^[\"']+", "")
-	text = string.gsub(text, "[\"']+$", "")
-	return text
-end
-
-local function parseKey(raw)
-	local text = cleanKeyText(raw)
-	if text == "" then
-		return nil, "empty"
-	end
-	if string.sub(text, 1, 6) ~= "KHUB2." then
-		return nil, "format"
-	end
-	local lastDot = 0
-	for i = 1, #text do
-		if string.sub(text, i, i) == "." then
-			lastDot = i
-		end
-	end
-	if lastDot < 8 then
-		return nil, "format"
-	end
-	local payload = string.sub(text, 7, lastDot - 1)
-	local sig = string.lower(string.sub(text, lastDot + 1))
-	if payload == "" or not string.match(sig, "^%x%x%x%x$") then
-		return nil, "format"
-	end
-	local expect = keyChecksum(payload .. "|" .. KEY_SECRET, KEY_SECRET)
-	if sig ~= expect then
-		return nil, "sig"
-	end
-	local decoded = b64decode(payload)
-	if not decoded or decoded == "" then
-		return nil, "json"
-	end
-	local id, expStr, daysStr = string.match(decoded, "^([^|]+)|([^|]+)|([^|]+)$")
-	local exp = tonumber(expStr)
-	local days = tonumber(daysStr)
-	if type(id) ~= "string" or not exp or not days then
-		return nil, "fields"
-	end
-	if exp <= os.time() then
-		return nil, "expired"
-	end
-	return { id = id, exp = exp, days = days }, nil
-end
-
-local function isRevoked(id)
-	if REVOKED_URL == "" then
-		return false
-	end
-	local ok, body = pcall(function()
-		return game:HttpGet(REVOKED_URL)
-	end)
-	if ok and body and string.find(body, id, 1, true) then
-		return true
-	end
-	return false
-end
-
-local function saveKeyData(expireAt, keyId, fullKey)
+local function saveState(state)
 	pcall(function()
 		if writefile then
-			writefile(KEY_FILE, HttpService:JSONEncode({
-				expire = expireAt,
-				id = keyId,
-				key = fullKey,
-			}))
+			writefile(KEY_FILE, HttpService:JSONEncode(state))
 		end
 	end)
 end
 
-local function loadKeyData()
+local function loadState()
 	local ok, data = pcall(function()
 		if isfile and isfile(KEY_FILE) and readfile then
 			return HttpService:JSONDecode(readfile(KEY_FILE))
 		end
 	end)
-	if ok and type(data) == "table" and type(data.expire) == "number" then
+	if ok and type(data) == "table" then
 		return data
 	end
 	return nil
 end
 
-local function clearKeyData()
+local function clearState()
 	pcall(function()
 		if isfile and isfile(KEY_FILE) and delfile then
 			delfile(KEY_FILE)
@@ -177,50 +71,79 @@ local function clearKeyData()
 end
 
 local function formatTimeLeft(sec)
-	if sec <= 0 then
-		return "Expired"
-	end
+	if sec <= 0 then return "Expired" end
 	local d = math.floor(sec / 86400)
 	local h = math.floor((sec % 86400) / 3600)
 	local m = math.floor((sec % 3600) / 60)
-	local s = math.floor(sec % 60)
-	if d > 0 then
-		return string.format("%dd %dh %dm", d, h, m)
-	end
-	if h > 0 then
-		return string.format("%dh %dm %ds", h, m, s)
-	end
-	return string.format("%dm %ds", m, s)
+	if d > 0 then return string.format("%dd %dh %dm", d, h, m) end
+	if h > 0 then return string.format("%dh %dm", h, m) end
+	return string.format("%dm", m)
 end
 
-local keyExpireAt = 0
+-- state fields:
+--   perm = true  → permanent unlock
+--   index = 1..3 → which rotating key is active
+--   expire = unix timestamp
+local state = loadState() or {}
 local keyUnlocked = false
-do
-	local saved = loadKeyData()
-	if saved and type(saved.key) == "string" then
-		local info = parseKey(saved.key)
-		if info and not isRevoked(info.id) then
-			keyExpireAt = info.exp
-			keyUnlocked = true
-			_G.KHUB_KeyExpire = keyExpireAt
-			_G.KHUB_KeyId = info.id
-		else
-			clearKeyData()
-		end
+
+local function isActive()
+	if state.perm == true then
+		return true
 	end
+	local exp = tonumber(state.expire) or 0
+	if exp > os.time() and type(state.index) == "number" then
+		return true
+	end
+	return false
+end
+
+if isActive() then
+	keyUnlocked = true
+	_G.KHUB_KeyExpire = state.perm and 0 or (tonumber(state.expire) or 0)
+	_G.KHUB_KeyPerm = state.perm == true
+	print("[KHUB FTAP] Key auto-unlocked")
+end
+
+-- Which rotating key is required NEXT (when current expired / none)
+local function requiredIndex()
+	if type(state.index) == "number" and state.index >= 1 and state.index <= #ROTATING then
+		local exp = tonumber(state.expire) or 0
+		if exp > os.time() then
+			-- still active: same index (re-enter same key ok)
+			return state.index
+		end
+		-- expired → next in rotation
+		return (state.index % #ROTATING) + 1
+	end
+	-- first time: key 1
+	return 1
 end
 
 if not keyUnlocked then
-	local parentGui = (gethui and gethui()) or CoreGui
+	local parentGui
+	pcall(function()
+		if gethui then parentGui = gethui() end
+	end)
+	if not parentGui then
+		pcall(function() parentGui = CoreGui end)
+	end
+	if not parentGui then
+		parentGui = LocalPlayer:WaitForChild("PlayerGui")
+	end
+
+	pcall(function()
+		local old = parentGui:FindFirstChild("KHUB_KeyGate")
+		if old then old:Destroy() end
+	end)
+
 	local KeyGui = Instance.new("ScreenGui")
 	KeyGui.Name = "KHUB_KeyGate"
 	KeyGui.ResetOnSpawn = false
 	KeyGui.IgnoreGuiInset = true
 	KeyGui.DisplayOrder = 2147483000
-	pcall(function() KeyGui.Parent = parentGui end)
-	if not KeyGui.Parent then
-		KeyGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
-	end
+	KeyGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+	KeyGui.Parent = parentGui
 
 	local function corner(o, r)
 		local c = Instance.new("UICorner")
@@ -235,48 +158,31 @@ if not keyUnlocked then
 	KeyFrame.BorderSizePixel = 0
 	KeyFrame.Parent = KeyGui
 	corner(KeyFrame, 14)
-	local ks = Instance.new("UIStroke")
-	ks.Color = Color3.fromRGB(160, 100, 255)
-	ks.Thickness = 1.4
-	ks.Transparency = 0.35
-	ks.Parent = KeyFrame
-
-	local TopAccent = Instance.new("Frame")
-	TopAccent.Size = UDim2.new(1, 0, 0, 4)
-	TopAccent.BorderSizePixel = 0
-	TopAccent.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-	TopAccent.Parent = KeyFrame
-	local tg = Instance.new("UIGradient")
-	tg.Color = ColorSequence.new({
-		ColorSequenceKeypoint.new(0, Color3.fromRGB(90, 40, 180)),
-		ColorSequenceKeypoint.new(0.5, Color3.fromRGB(255, 220, 120)),
-		ColorSequenceKeypoint.new(1, Color3.fromRGB(90, 40, 180)),
-	})
-	tg.Parent = TopAccent
-	task.spawn(function()
-		local tt = 0
-		while TopAccent and TopAccent.Parent do
-			tt = tt + task.wait(0.03)
-			tg.Offset = Vector2.new(math.sin(tt * 1.3) * 0.8, 0)
-		end
-	end)
+	local st = Instance.new("UIStroke")
+	st.Color = Color3.fromRGB(160, 100, 255)
+	st.Thickness = 1.4
+	st.Transparency = 0.3
+	st.Parent = KeyFrame
 
 	local title = Instance.new("TextLabel")
-	title.Size = UDim2.new(1, -24, 0, 28)
-	title.Position = UDim2.fromOffset(12, 18)
+	title.Size = UDim2.new(1, -24, 0, 26)
+	title.Position = UDim2.fromOffset(12, 14)
 	title.BackgroundTransparency = 1
-	title.Text = "KHUB · Key System v2"
+	title.Text = "KHUB · Key System"
 	title.Font = Enum.Font.GothamBlack
 	title.TextSize = 17
-	title.TextColor3 = Color3.fromRGB(240, 230, 255)
+	title.TextColor3 = Color3.fromRGB(255, 200, 255)
 	title.TextXAlignment = Enum.TextXAlignment.Left
 	title.Parent = KeyFrame
 
+	local needIdx = requiredIndex()
+	local needHours = ROTATING[needIdx].hours
+
 	local sub = Instance.new("TextLabel")
-	sub.Size = UDim2.new(1, -24, 0, 36)
-	sub.Position = UDim2.fromOffset(12, 48)
+	sub.Size = UDim2.new(1, -24, 0, 40)
+	sub.Position = UDim2.fromOffset(12, 44)
 	sub.BackgroundTransparency = 1
-	sub.Text = "Flings Things and People · Premium\nPaste full KHUB2... key"
+	sub.Text = "FTAP Premium\nNeed key #" .. needIdx .. "  ·  " .. needHours .. "h duration"
 	sub.Font = Enum.Font.Gotham
 	sub.TextSize = 12
 	sub.TextColor3 = Color3.fromRGB(160, 140, 190)
@@ -289,47 +195,46 @@ if not keyUnlocked then
 	keyBox.Position = UDim2.fromOffset(12, 96)
 	keyBox.BackgroundColor3 = Color3.fromRGB(22, 16, 34)
 	keyBox.Text = ""
-	keyBox.PlaceholderText = "KHUB2........"
+	keyBox.PlaceholderText = "Paste key here"
 	keyBox.Font = Enum.Font.Gotham
 	keyBox.TextSize = 13
 	keyBox.TextColor3 = Color3.fromRGB(240, 240, 255)
-	keyBox.PlaceholderColor3 = Color3.fromRGB(100, 90, 130)
+	keyBox.PlaceholderColor3 = Color3.fromRGB(110, 95, 140)
 	keyBox.ClearTextOnFocus = false
+	keyBox.TextXAlignment = Enum.TextXAlignment.Left
 	keyBox.Parent = KeyFrame
 	corner(keyBox, 8)
-	local kbStroke = Instance.new("UIStroke")
-	kbStroke.Color = Color3.fromRGB(120, 80, 180)
-	kbStroke.Thickness = 1
-	kbStroke.Transparency = 0.4
-	kbStroke.Parent = keyBox
+	local pad = Instance.new("UIPadding")
+	pad.PaddingLeft = UDim.new(0, 8)
+	pad.Parent = keyBox
 
-	local discordBtn = Instance.new("TextButton")
-	discordBtn.Size = UDim2.new(0.48, -8, 0, 34)
-	discordBtn.Position = UDim2.fromOffset(12, 144)
-	discordBtn.BackgroundColor3 = Color3.fromRGB(50, 30, 90)
-	discordBtn.Text = "GET KEY (Discord)"
-	discordBtn.Font = Enum.Font.GothamBold
-	discordBtn.TextSize = 12
-	discordBtn.TextColor3 = Color3.fromRGB(220, 200, 255)
-	discordBtn.Parent = KeyFrame
-	corner(discordBtn, 8)
+	local genBtn = Instance.new("TextButton")
+	genBtn.Size = UDim2.new(0.48, -6, 0, 34)
+	genBtn.Position = UDim2.fromOffset(12, 144)
+	genBtn.BackgroundColor3 = Color3.fromRGB(50, 30, 90)
+	genBtn.Text = "Copy Discord"
+	genBtn.Font = Enum.Font.GothamBold
+	genBtn.TextSize = 12
+	genBtn.TextColor3 = Color3.fromRGB(255, 200, 255)
+	genBtn.Parent = KeyFrame
+	corner(genBtn, 8)
 
-	local submit = Instance.new("TextButton")
-	submit.Size = UDim2.new(0.48, -8, 0, 34)
-	submit.Position = UDim2.new(0.52, 0, 0, 144)
-	submit.BackgroundColor3 = Color3.fromRGB(40, 140, 80)
-	submit.Text = "Submit Key"
-	submit.Font = Enum.Font.GothamBold
-	submit.TextSize = 13
-	submit.TextColor3 = Color3.new(1, 1, 1)
-	submit.Parent = KeyFrame
-	corner(submit, 8)
+	local submitBtn = Instance.new("TextButton")
+	submitBtn.Size = UDim2.new(0.48, -6, 0, 34)
+	submitBtn.Position = UDim2.new(0.52, 0, 0, 144)
+	submitBtn.BackgroundColor3 = Color3.fromRGB(40, 140, 80)
+	submitBtn.Text = "Submit Key"
+	submitBtn.Font = Enum.Font.GothamBold
+	submitBtn.TextSize = 13
+	submitBtn.TextColor3 = Color3.new(1, 1, 1)
+	submitBtn.Parent = KeyFrame
+	corner(submitBtn, 8)
 
 	local keyStatus = Instance.new("TextLabel")
-	keyStatus.Size = UDim2.new(1, -24, 0, 70)
+	keyStatus.Size = UDim2.new(1, -24, 0, 90)
 	keyStatus.Position = UDim2.fromOffset(12, 190)
 	keyStatus.BackgroundTransparency = 1
-	keyStatus.Text = "Use keys from KHUB Key Generator v2\n(starts with KHUB2.)"
+	keyStatus.Text = "Rotating keys · use in order when expired\nKey #1 = 24h · Key #2 = 34h · Key #3 = 34h\nPerm key always works"
 	keyStatus.Font = Enum.Font.Gotham
 	keyStatus.TextSize = 11
 	keyStatus.TextColor3 = Color3.fromRGB(160, 130, 190)
@@ -337,49 +242,7 @@ if not keyUnlocked then
 	keyStatus.TextYAlignment = Enum.TextYAlignment.Top
 	keyStatus.Parent = KeyFrame
 
-	local function tryUnlock(raw)
-		local info, err = parseKey(raw)
-		if not info then
-			clearKeyData()
-			if err == "expired" then
-				keyStatus.Text = "Key expired — request a new one"
-			elseif err == "sig" then
-				keyStatus.Text = "Bad signature — wrong key / secret"
-			elseif err == "format" then
-				keyStatus.Text = "Invalid format — need full KHUB2... key"
-			else
-				keyStatus.Text = "Invalid key (" .. tostring(err) .. ")"
-			end
-			keyStatus.TextColor3 = Color3.fromRGB(255, 120, 120)
-			return false
-		end
-		if isRevoked(info.id) then
-			clearKeyData()
-			keyStatus.Text = "Key revoked — ask owner for a new key"
-			keyStatus.TextColor3 = Color3.fromRGB(255, 120, 120)
-			return false
-		end
-		saveKeyData(info.exp, info.id, cleanKeyText(raw))
-		keyExpireAt = info.exp
-		_G.KHUB_KeyExpire = info.exp
-		_G.KHUB_KeyId = info.id
-		keyStatus.Text = "Access granted · " .. formatTimeLeft(info.exp - os.time())
-		keyStatus.TextColor3 = Color3.fromRGB(120, 255, 160)
-		task.wait(0.45)
-		keyUnlocked = true
-		pcall(function() KeyGui:Destroy() end)
-		return true
-	end
-
-	submit.MouseButton1Click:Connect(function()
-		tryUnlock(keyBox.Text)
-	end)
-	keyBox.FocusLost:Connect(function(enter)
-		if enter then
-			tryUnlock(keyBox.Text)
-		end
-	end)
-	discordBtn.MouseButton1Click:Connect(function()
+	genBtn.MouseButton1Click:Connect(function()
 		pcall(function()
 			if setclipboard then
 				setclipboard(DISCORD)
@@ -387,20 +250,105 @@ if not keyUnlocked then
 				toclipboard(DISCORD)
 			end
 		end)
-		keyStatus.Text = "Discord copied — ask owner for KHUB2 key"
+		keyStatus.Text = "Discord copied"
 		keyStatus.TextColor3 = Color3.fromRGB(180, 220, 255)
+	end)
+
+	local function tryUnlock(raw)
+		local input = cleanKey(raw)
+		if input == "" then
+			keyStatus.Text = "Enter a key first"
+			keyStatus.TextColor3 = Color3.fromRGB(255, 100, 100)
+			return
+		end
+
+		-- Permanent key
+		if keysEqual(input, PERM_KEY) then
+			state = { perm = true, index = 0, expire = 0 }
+			saveState(state)
+			_G.KHUB_KeyExpire = 0
+			_G.KHUB_KeyPerm = true
+			keyStatus.Text = "PERMANENT ACCESS"
+			keyStatus.TextColor3 = Color3.fromRGB(120, 255, 160)
+			task.wait(0.35)
+			keyUnlocked = true
+			pcall(function() KeyGui:Destroy() end)
+			return
+		end
+
+		local need = requiredIndex()
+		local matchedIndex = nil
+		for i, entry in ipairs(ROTATING) do
+			if keysEqual(input, entry.key) then
+				matchedIndex = i
+				break
+			end
+		end
+
+		if not matchedIndex then
+			keyStatus.Text = "Invalid key"
+			keyStatus.TextColor3 = Color3.fromRGB(255, 100, 100)
+			return
+		end
+
+		-- Still active with this same key → refresh ok / just unlock
+		local exp = tonumber(state.expire) or 0
+		if state.index == matchedIndex and exp > os.time() then
+			keyStatus.Text = "Still active · " .. formatTimeLeft(exp - os.time())
+			keyStatus.TextColor3 = Color3.fromRGB(120, 255, 160)
+			task.wait(0.3)
+			keyUnlocked = true
+			pcall(function() KeyGui:Destroy() end)
+			return
+		end
+
+		-- Must use the required next key
+		if matchedIndex ~= need then
+			keyStatus.Text = "Wrong key · need key #" .. need .. " right now\n(Key #" .. matchedIndex .. " is not active yet)"
+			keyStatus.TextColor3 = Color3.fromRGB(255, 160, 80)
+			return
+		end
+
+		local hours = ROTATING[matchedIndex].hours
+		local newExp = os.time() + (hours * 3600)
+		state = {
+			perm = false,
+			index = matchedIndex,
+			expire = newExp,
+		}
+		saveState(state)
+		_G.KHUB_KeyExpire = newExp
+		_G.KHUB_KeyPerm = false
+		keyStatus.Text = "Access granted · key #" .. matchedIndex .. "\n" .. formatTimeLeft(hours * 3600) .. " remaining"
+		keyStatus.TextColor3 = Color3.fromRGB(120, 255, 160)
+		task.wait(0.4)
+		keyUnlocked = true
+		pcall(function() KeyGui:Destroy() end)
+	end
+
+	submitBtn.MouseButton1Click:Connect(function()
+		tryUnlock(keyBox.Text)
+	end)
+	keyBox.FocusLost:Connect(function(enter)
+		if enter then
+			tryUnlock(keyBox.Text)
+		end
 	end)
 
 	repeat task.wait(0.1) until keyUnlocked
 end
 
+-- Expiry watcher (rotating only)
 task.spawn(function()
 	while true do
 		task.wait(30)
-		local exp = tonumber(_G.KHUB_KeyExpire) or keyExpireAt or 0
-		if exp > 0 and os.time() >= exp then
-			clearKeyData()
-			_G.KHUB_KeyExpire = 0
+		local s = loadState()
+		if s and s.perm ~= true then
+			local exp = tonumber(s.expire) or 0
+			if exp > 0 and os.time() >= exp then
+				-- keep index so next required key is known; just mark expired
+				-- (requiredIndex uses expire check)
+			end
 		end
 	end
 end)
