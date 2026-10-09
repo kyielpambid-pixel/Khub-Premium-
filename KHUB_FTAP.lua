@@ -2,208 +2,408 @@
 	Flings Things and People
 	KHUB Premium · Full Feature Build
 	Toggle: RightShift (library default may vary)
+	Key System: KHUB2 (same as Steal an Egg free PS)
 ]]
 
---------------------------------------------------------------------
--- KEY SYSTEM (Luxury / steal-an-egg free PS style)
---------------------------------------------------------------------
-do
-	local Players = game:GetService("Players")
-	local HttpService = game:GetService("HttpService")
-	local TweenService = game:GetService("TweenService")
-	local CoreGui = game:GetService("CoreGui")
-	local LocalPlayer = Players.LocalPlayer or Players.PlayerAdded:Wait()
+repeat task.wait() until game:IsLoaded()
 
-	local DiscordInvite = "https://discord.gg/EKPb7BRDH8"
-	local KeysURL = "https://api.jsonbin.io/v3/b/6a74b132f5f4af5e29f381ff"
-	local remoteKeys = {}
+local Players = game:GetService("Players")
+local TweenService = game:GetService("TweenService")
+local UserInputService = game:GetService("UserInputService")
+local HttpService = game:GetService("HttpService")
+local CoreGui = game:GetService("CoreGui")
 
-	local function getGuiParent()
-		local ok, gui = pcall(function()
-			if gethui then return gethui() end
-		end)
-		if ok and gui then return gui end
-		ok, gui = pcall(function() return CoreGui end)
-		if ok and gui then return gui end
-		return LocalPlayer:WaitForChild("PlayerGui")
-	end
-
+local LocalPlayer = Players.LocalPlayer
+if not LocalPlayer then
 	pcall(function()
-		local p = getGuiParent()
-		local old = p:FindFirstChild("LuxuryKeySystem")
-		if old then old:Destroy() end
+		Players:GetPropertyChangedSignal("LocalPlayer"):Wait()
 	end)
+	LocalPlayer = Players.LocalPlayer
+end
 
-	local KeyGui = Instance.new("ScreenGui")
-	KeyGui.Name = "LuxuryKeySystem"
-	KeyGui.ResetOnSpawn = false
-	KeyGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-	KeyGui.DisplayOrder = 2147483000
-	pcall(function() KeyGui.IgnoreGuiInset = true end)
-	KeyGui.Parent = getGuiParent()
+local DISCORD = "https://discord.gg/EKPb7BRDH8"
+local KEY_FILE = "KHUB_FTAP_Key_v2.json"
+local KEY_SECRET = "KHUB_STEALEGG_SECRET_v2"
+local REVOKED_URL = ""
 
-	local Card = Instance.new("Frame")
-	Card.Size = UDim2.new(0, 320, 0, 290)
-	Card.Position = UDim2.new(0.5, -160, 0.5, -145)
-	Card.BackgroundColor3 = Color3.fromRGB(12, 12, 18)
-	Card.BorderSizePixel = 0
-	Card.Parent = KeyGui
-	Instance.new("UICorner", Card).CornerRadius = UDim.new(0, 12)
-	local st = Instance.new("UIStroke", Card)
-	st.Color = Color3.fromRGB(175, 110, 255)
-	st.Thickness = 1.5
+local function keyChecksum(str, secret)
+	local sum = 0
+	for i = 1, #str do
+		sum = (sum + string.byte(str, i) * i) % 65521
+	end
+	for i = 1, #secret do
+		sum = (sum + string.byte(secret, i) * (i + 7)) % 65521
+	end
+	return string.format("%04x", sum)
+end
 
-	local Title = Instance.new("TextLabel")
-	Title.Size = UDim2.new(1, -24, 0, 28)
-	Title.Position = UDim2.fromOffset(12, 16)
-	Title.BackgroundTransparency = 1
-	Title.Text = "KHUB · Key System"
-	Title.Font = Enum.Font.GothamBlack
-	Title.TextSize = 18
-	Title.TextColor3 = Color3.fromRGB(240, 240, 255)
-	Title.TextXAlignment = Enum.TextXAlignment.Left
-	Title.Parent = Card
+local B64CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+local B64MAP = {}
+for i = 1, 64 do
+	B64MAP[string.sub(B64CHARS, i, i)] = i - 1
+end
 
-	local Sub = Instance.new("TextLabel")
-	Sub.Size = UDim2.new(1, -24, 0, 40)
-	Sub.Position = UDim2.fromOffset(12, 48)
-	Sub.BackgroundTransparency = 1
-	Sub.Text = "Enter your key to unlock\nFlings Things and People · Premium"
-	Sub.Font = Enum.Font.Gotham
-	Sub.TextSize = 12
-	Sub.TextColor3 = Color3.fromRGB(150, 160, 190)
-	Sub.TextXAlignment = Enum.TextXAlignment.Left
-	Sub.TextYAlignment = Enum.TextYAlignment.Top
-	Sub.Parent = Card
-
-	local KeyBox = Instance.new("TextBox")
-	KeyBox.Size = UDim2.new(1, -24, 0, 36)
-	KeyBox.Position = UDim2.fromOffset(12, 100)
-	KeyBox.BackgroundColor3 = Color3.fromRGB(22, 22, 32)
-	KeyBox.BorderSizePixel = 0
-	KeyBox.PlaceholderText = "Paste key here..."
-	KeyBox.Text = ""
-	KeyBox.Font = Enum.Font.Gotham
-	KeyBox.TextSize = 13
-	KeyBox.TextColor3 = Color3.fromRGB(240, 240, 255)
-	KeyBox.ClearTextOnFocus = false
-	KeyBox.Parent = Card
-	Instance.new("UICorner", KeyBox).CornerRadius = UDim.new(0, 8)
-
-	local Status = Instance.new("TextLabel")
-	Status.Size = UDim2.new(1, -24, 0, 18)
-	Status.Position = UDim2.fromOffset(12, 144)
-	Status.BackgroundTransparency = 1
-	Status.Text = ""
-	Status.Font = Enum.Font.Gotham
-	Status.TextSize = 12
-	Status.TextColor3 = Color3.fromRGB(255, 200, 80)
-	Status.TextXAlignment = Enum.TextXAlignment.Left
-	Status.Parent = Card
-
-	local Submit = Instance.new("TextButton")
-	Submit.Size = UDim2.new(1, -24, 0, 36)
-	Submit.Position = UDim2.fromOffset(12, 170)
-	Submit.BackgroundColor3 = Color3.fromRGB(140, 80, 220)
-	Submit.BorderSizePixel = 0
-	Submit.Text = "UNLOCK"
-	Submit.Font = Enum.Font.GothamBold
-	Submit.TextSize = 14
-	Submit.TextColor3 = Color3.new(1, 1, 1)
-	Submit.Parent = Card
-	Instance.new("UICorner", Submit).CornerRadius = UDim.new(0, 8)
-
-	local GetKey = Instance.new("TextButton")
-	GetKey.Size = UDim2.new(1, -24, 0, 32)
-	GetKey.Position = UDim2.fromOffset(12, 216)
-	GetKey.BackgroundColor3 = Color3.fromRGB(28, 32, 48)
-	GetKey.BorderSizePixel = 0
-	GetKey.Text = "GET KEY (Discord)"
-	GetKey.Font = Enum.Font.GothamMedium
-	GetKey.TextSize = 12
-	GetKey.TextColor3 = Color3.fromRGB(200, 200, 220)
-	GetKey.Parent = Card
-	Instance.new("UICorner", GetKey).CornerRadius = UDim.new(0, 8)
-
-	GetKey.MouseButton1Click:Connect(function()
-		pcall(function()
-			if setclipboard then setclipboard(DiscordInvite) end
-		end)
-		Status.Text = "Discord invite copied"
-		Status.TextColor3 = Color3.fromRGB(95, 235, 165)
+local function b64decode(data)
+	if type(data) ~= "string" or data == "" then
+		return nil
+	end
+	data = string.gsub(data, "%s+", "")
+	local ok, decoded = pcall(function()
+		if crypt and crypt.base64decode then
+			return crypt.base64decode(data)
+		end
+		if crypt and crypt.base64_decode then
+			return crypt.base64_decode(data)
+		end
 	end)
-
-	local function fetchKeys()
-		local ok, body = pcall(function()
-			return game:HttpGet(KeysURL)
-		end)
-		if not ok or not body then return false end
-		local ok2, decoded = pcall(function()
-			return HttpService:JSONDecode(body)
-		end)
-		if not ok2 or type(decoded) ~= "table" then return false end
-		local record = decoded.record or decoded
-		if type(record) == "table" then
-			if type(record.keys) == "table" then
-				for _, k in ipairs(record.keys) do
-					remoteKeys[string.upper(tostring(k))] = true
-				end
-			else
-				for _, k in pairs(record) do
-					if type(k) == "string" then
-						remoteKeys[string.upper(k)] = true
-					elseif type(k) == "table" then
-						for _, k2 in pairs(k) do
-							if type(k2) == "string" then
-								remoteKeys[string.upper(k2)] = true
-							end
-						end
-					end
-				end
+	if ok and type(decoded) == "string" and #decoded > 0 then
+		return decoded
+	end
+	local out = {}
+	local buf, bits = 0, 0
+	for i = 1, #data do
+		local ch = string.sub(data, i, i)
+		if ch ~= "=" then
+			local v = B64MAP[ch]
+			if v == nil then
+				return nil
+			end
+			buf = buf * 64 + v
+			bits = bits + 6
+			if bits >= 8 then
+				bits = bits - 8
+				local byte = math.floor(buf / (2 ^ bits)) % 256
+				out[#out + 1] = string.char(byte)
 			end
 		end
+	end
+	return table.concat(out)
+end
+
+local function cleanKeyText(raw)
+	local text = tostring(raw or "")
+	text = string.gsub(text, "%s+", "")
+	text = string.gsub(text, "[\r\n\t%z]", "")
+	text = string.gsub(text, "^[\"']+", "")
+	text = string.gsub(text, "[\"']+$", "")
+	return text
+end
+
+local function parseKey(raw)
+	local text = cleanKeyText(raw)
+	if text == "" then
+		return nil, "empty"
+	end
+	if string.sub(text, 1, 6) ~= "KHUB2." then
+		return nil, "format"
+	end
+	local lastDot = 0
+	for i = 1, #text do
+		if string.sub(text, i, i) == "." then
+			lastDot = i
+		end
+	end
+	if lastDot < 8 then
+		return nil, "format"
+	end
+	local payload = string.sub(text, 7, lastDot - 1)
+	local sig = string.lower(string.sub(text, lastDot + 1))
+	if payload == "" or not string.match(sig, "^%x%x%x%x$") then
+		return nil, "format"
+	end
+	local expect = keyChecksum(payload .. "|" .. KEY_SECRET, KEY_SECRET)
+	if sig ~= expect then
+		return nil, "sig"
+	end
+	local decoded = b64decode(payload)
+	if not decoded or decoded == "" then
+		return nil, "json"
+	end
+	local id, expStr, daysStr = string.match(decoded, "^([^|]+)|([^|]+)|([^|]+)$")
+	local exp = tonumber(expStr)
+	local days = tonumber(daysStr)
+	if type(id) ~= "string" or not exp or not days then
+		return nil, "fields"
+	end
+	if exp <= os.time() then
+		return nil, "expired"
+	end
+	return { id = id, exp = exp, days = days }, nil
+end
+
+local function isRevoked(id)
+	if REVOKED_URL == "" then
+		return false
+	end
+	local ok, body = pcall(function()
+		return game:HttpGet(REVOKED_URL)
+	end)
+	if ok and body and string.find(body, id, 1, true) then
+		return true
+	end
+	return false
+end
+
+local function saveKeyData(expireAt, keyId, fullKey)
+	pcall(function()
+		if writefile then
+			writefile(KEY_FILE, HttpService:JSONEncode({
+				expire = expireAt,
+				id = keyId,
+				key = fullKey,
+			}))
+		end
+	end)
+end
+
+local function loadKeyData()
+	local ok, data = pcall(function()
+		if isfile and isfile(KEY_FILE) and readfile then
+			return HttpService:JSONDecode(readfile(KEY_FILE))
+		end
+	end)
+	if ok and type(data) == "table" and type(data.expire) == "number" then
+		return data
+	end
+	return nil
+end
+
+local function clearKeyData()
+	pcall(function()
+		if isfile and isfile(KEY_FILE) and delfile then
+			delfile(KEY_FILE)
+		end
+	end)
+end
+
+local function formatTimeLeft(sec)
+	if sec <= 0 then
+		return "Expired"
+	end
+	local d = math.floor(sec / 86400)
+	local h = math.floor((sec % 86400) / 3600)
+	local m = math.floor((sec % 3600) / 60)
+	local s = math.floor(sec % 60)
+	if d > 0 then
+		return string.format("%dd %dh %dm", d, h, m)
+	end
+	if h > 0 then
+		return string.format("%dh %dm %ds", h, m, s)
+	end
+	return string.format("%dm %ds", m, s)
+end
+
+local keyExpireAt = 0
+local keyUnlocked = false
+do
+	local saved = loadKeyData()
+	if saved and type(saved.key) == "string" then
+		local info = parseKey(saved.key)
+		if info and not isRevoked(info.id) then
+			keyExpireAt = info.exp
+			keyUnlocked = true
+			_G.KHUB_KeyExpire = keyExpireAt
+			_G.KHUB_KeyId = info.id
+		else
+			clearKeyData()
+		end
+	end
+end
+
+if not keyUnlocked then
+	local parentGui = (gethui and gethui()) or CoreGui
+	local KeyGui = Instance.new("ScreenGui")
+	KeyGui.Name = "KHUB_KeyGate"
+	KeyGui.ResetOnSpawn = false
+	KeyGui.IgnoreGuiInset = true
+	KeyGui.DisplayOrder = 2147483000
+	pcall(function() KeyGui.Parent = parentGui end)
+	if not KeyGui.Parent then
+		KeyGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+	end
+
+	local function corner(o, r)
+		local c = Instance.new("UICorner")
+		c.CornerRadius = UDim.new(0, r or 10)
+		c.Parent = o
+	end
+
+	local KeyFrame = Instance.new("Frame")
+	KeyFrame.Size = UDim2.new(0, 320, 0, 310)
+	KeyFrame.Position = UDim2.new(0.5, -160, 0.5, -155)
+	KeyFrame.BackgroundColor3 = Color3.fromRGB(14, 10, 22)
+	KeyFrame.BorderSizePixel = 0
+	KeyFrame.Parent = KeyGui
+	corner(KeyFrame, 14)
+	local ks = Instance.new("UIStroke")
+	ks.Color = Color3.fromRGB(160, 100, 255)
+	ks.Thickness = 1.4
+	ks.Transparency = 0.35
+	ks.Parent = KeyFrame
+
+	local TopAccent = Instance.new("Frame")
+	TopAccent.Size = UDim2.new(1, 0, 0, 4)
+	TopAccent.BorderSizePixel = 0
+	TopAccent.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+	TopAccent.Parent = KeyFrame
+	local tg = Instance.new("UIGradient")
+	tg.Color = ColorSequence.new({
+		ColorSequenceKeypoint.new(0, Color3.fromRGB(90, 40, 180)),
+		ColorSequenceKeypoint.new(0.5, Color3.fromRGB(255, 220, 120)),
+		ColorSequenceKeypoint.new(1, Color3.fromRGB(90, 40, 180)),
+	})
+	tg.Parent = TopAccent
+	task.spawn(function()
+		local tt = 0
+		while TopAccent and TopAccent.Parent do
+			tt = tt + task.wait(0.03)
+			tg.Offset = Vector2.new(math.sin(tt * 1.3) * 0.8, 0)
+		end
+	end)
+
+	local title = Instance.new("TextLabel")
+	title.Size = UDim2.new(1, -24, 0, 28)
+	title.Position = UDim2.fromOffset(12, 18)
+	title.BackgroundTransparency = 1
+	title.Text = "KHUB · Key System v2"
+	title.Font = Enum.Font.GothamBlack
+	title.TextSize = 17
+	title.TextColor3 = Color3.fromRGB(240, 230, 255)
+	title.TextXAlignment = Enum.TextXAlignment.Left
+	title.Parent = KeyFrame
+
+	local sub = Instance.new("TextLabel")
+	sub.Size = UDim2.new(1, -24, 0, 36)
+	sub.Position = UDim2.fromOffset(12, 48)
+	sub.BackgroundTransparency = 1
+	sub.Text = "Flings Things and People · Premium\nPaste full KHUB2... key"
+	sub.Font = Enum.Font.Gotham
+	sub.TextSize = 12
+	sub.TextColor3 = Color3.fromRGB(160, 140, 190)
+	sub.TextXAlignment = Enum.TextXAlignment.Left
+	sub.TextYAlignment = Enum.TextYAlignment.Top
+	sub.Parent = KeyFrame
+
+	local keyBox = Instance.new("TextBox")
+	keyBox.Size = UDim2.new(1, -24, 0, 36)
+	keyBox.Position = UDim2.fromOffset(12, 96)
+	keyBox.BackgroundColor3 = Color3.fromRGB(22, 16, 34)
+	keyBox.Text = ""
+	keyBox.PlaceholderText = "KHUB2........"
+	keyBox.Font = Enum.Font.Gotham
+	keyBox.TextSize = 13
+	keyBox.TextColor3 = Color3.fromRGB(240, 240, 255)
+	keyBox.PlaceholderColor3 = Color3.fromRGB(100, 90, 130)
+	keyBox.ClearTextOnFocus = false
+	keyBox.Parent = KeyFrame
+	corner(keyBox, 8)
+	local kbStroke = Instance.new("UIStroke")
+	kbStroke.Color = Color3.fromRGB(120, 80, 180)
+	kbStroke.Thickness = 1
+	kbStroke.Transparency = 0.4
+	kbStroke.Parent = keyBox
+
+	local discordBtn = Instance.new("TextButton")
+	discordBtn.Size = UDim2.new(0.48, -8, 0, 34)
+	discordBtn.Position = UDim2.fromOffset(12, 144)
+	discordBtn.BackgroundColor3 = Color3.fromRGB(50, 30, 90)
+	discordBtn.Text = "GET KEY (Discord)"
+	discordBtn.Font = Enum.Font.GothamBold
+	discordBtn.TextSize = 12
+	discordBtn.TextColor3 = Color3.fromRGB(220, 200, 255)
+	discordBtn.Parent = KeyFrame
+	corner(discordBtn, 8)
+
+	local submit = Instance.new("TextButton")
+	submit.Size = UDim2.new(0.48, -8, 0, 34)
+	submit.Position = UDim2.new(0.52, 0, 0, 144)
+	submit.BackgroundColor3 = Color3.fromRGB(40, 140, 80)
+	submit.Text = "Submit Key"
+	submit.Font = Enum.Font.GothamBold
+	submit.TextSize = 13
+	submit.TextColor3 = Color3.new(1, 1, 1)
+	submit.Parent = KeyFrame
+	corner(submit, 8)
+
+	local keyStatus = Instance.new("TextLabel")
+	keyStatus.Size = UDim2.new(1, -24, 0, 70)
+	keyStatus.Position = UDim2.fromOffset(12, 190)
+	keyStatus.BackgroundTransparency = 1
+	keyStatus.Text = "Use keys from KHUB Key Generator v2\n(starts with KHUB2.)"
+	keyStatus.Font = Enum.Font.Gotham
+	keyStatus.TextSize = 11
+	keyStatus.TextColor3 = Color3.fromRGB(160, 130, 190)
+	keyStatus.TextWrapped = true
+	keyStatus.TextYAlignment = Enum.TextYAlignment.Top
+	keyStatus.Parent = KeyFrame
+
+	local function tryUnlock(raw)
+		local info, err = parseKey(raw)
+		if not info then
+			clearKeyData()
+			if err == "expired" then
+				keyStatus.Text = "Key expired — request a new one"
+			elseif err == "sig" then
+				keyStatus.Text = "Bad signature — wrong key / secret"
+			elseif err == "format" then
+				keyStatus.Text = "Invalid format — need full KHUB2... key"
+			else
+				keyStatus.Text = "Invalid key (" .. tostring(err) .. ")"
+			end
+			keyStatus.TextColor3 = Color3.fromRGB(255, 120, 120)
+			return false
+		end
+		if isRevoked(info.id) then
+			clearKeyData()
+			keyStatus.Text = "Key revoked — ask owner for a new key"
+			keyStatus.TextColor3 = Color3.fromRGB(255, 120, 120)
+			return false
+		end
+		saveKeyData(info.exp, info.id, cleanKeyText(raw))
+		keyExpireAt = info.exp
+		_G.KHUB_KeyExpire = info.exp
+		_G.KHUB_KeyId = info.id
+		keyStatus.Text = "Access granted · " .. formatTimeLeft(info.exp - os.time())
+		keyStatus.TextColor3 = Color3.fromRGB(120, 255, 160)
+		task.wait(0.45)
+		keyUnlocked = true
+		pcall(function() KeyGui:Destroy() end)
 		return true
 	end
 
-	local function isValid(key)
-		key = string.upper((key or ""):gsub("%s+", ""))
-		if key == "" then return false end
-		return remoteKeys[key] == true
-	end
-
-	local unlock = Instance.new("BindableEvent")
-	local busy = false
-	Submit.MouseButton1Click:Connect(function()
-		if busy then return end
-		busy = true
-		local key = KeyBox.Text
-		if not key or #key < 3 then
-			Status.Text = "Enter a key first"
-			Status.TextColor3 = Color3.fromRGB(255, 100, 100)
-			busy = false
-			return
-		end
-		Status.Text = "Checking..."
-		Status.TextColor3 = Color3.fromRGB(255, 200, 80)
-		fetchKeys()
-		task.wait(0.25)
-		if isValid(key) then
-			Status.Text = "ACCESS GRANTED"
-			Status.TextColor3 = Color3.fromRGB(0, 255, 157)
-			Submit.Text = "SUCCESS"
-			Submit.BackgroundColor3 = Color3.fromRGB(0, 180, 100)
-			task.wait(0.55)
-			KeyGui:Destroy()
-			unlock:Fire()
-		else
-			Status.Text = "Invalid / revoked key"
-			Status.TextColor3 = Color3.fromRGB(255, 80, 100)
-			busy = false
+	submit.MouseButton1Click:Connect(function()
+		tryUnlock(keyBox.Text)
+	end)
+	keyBox.FocusLost:Connect(function(enter)
+		if enter then
+			tryUnlock(keyBox.Text)
 		end
 	end)
+	discordBtn.MouseButton1Click:Connect(function()
+		pcall(function()
+			if setclipboard then
+				setclipboard(DISCORD)
+			elseif toclipboard then
+				toclipboard(DISCORD)
+			end
+		end)
+		keyStatus.Text = "Discord copied — ask owner for KHUB2 key"
+		keyStatus.TextColor3 = Color3.fromRGB(180, 220, 255)
+	end)
 
-	unlock.Event:Wait()
+	repeat task.wait(0.1) until keyUnlocked
 end
+
+task.spawn(function()
+	while true do
+		task.wait(30)
+		local exp = tonumber(_G.KHUB_KeyExpire) or keyExpireAt or 0
+		if exp > 0 and os.time() >= exp then
+			clearKeyData()
+			_G.KHUB_KeyExpire = 0
+		end
+	end
+end)
 
 --------------------------------------------------------------------
 -- FULL FEATURE BUILD (all modules from source)
