@@ -1,82 +1,20 @@
---[[
-	KHUB UI Library
-	Author: Kyiel Pambid (KHUB)
-	Discord: https://discord.gg/EKPb7BRDH8
-	YouTube: https://www.youtube.com/@kyielpambid
+-- KHUB UI Library
+-- Author: Kyiel Pambid (KHUB)
+-- Discord: https://discord.gg/EKPb7BRDH8
+-- YouTube: https://www.youtube.com/@kyielpambid
+--
+-- loadstring(game:HttpGet("https://raw.githubusercontent.com/kyielpambid-pixel/Khub-Premium-/refs/heads/main/Khub%20ui%20library%20m75752570oufcjljfljbpx"))()
+--
+-- After load, use getgenv().KHUB to add tabs:
+--   local K = getgenv().KHUB
+--   local Page = K.createTab("Farm", "Farm", 2, "main")
+--   K.tabMessages(Page, { "<> tip", "$ important", "> note" })
+--   local s = K.section(Page, "SECTION")
+--   K.addToggle(s, "Name", false, function(v) end)
+--   K.addSlider / K.addButton / K.addTextbox / K.addLabel / K.notify / K.switchTab
+-- Prefix: <> green | $ violet | > blue
+-- Toggle UI: RightShift / RightCtrl / K
 
-	Standalone UI template for GitHub / loadstring.
-	Default tabs: Welcome · Main · Player · Settings · Server
-	Toggle: RightShift / RightCtrl / K  ·  Floating orb (mobile / minimize)
-
-	================================================================
-	HOW TO ADD A TAB
-	================================================================
-	1. Create the page (order = sidebar position, smaller = higher):
-	     local PageFarm = createTab("Farm", "Farm", 2, "main")
-
-	2. Put content inside a do/end block:
-	     do
-	         tabMessages(PageFarm, { ... })          -- optional instruction box
-	         local s = section(PageFarm, "AUTO FARM")
-	         addToggle(s, "Auto Farm", false, function(v) end)
-	         addSlider(s, "Speed", 1, 100, 16, function(v) end)
-	         addButton(s, "Run Once", function() end)
-	         addTextbox(s, "Name", "default", function(text) end)
-	         addLabel(s, "Hint text", 11, THEME.dim)
-	     end
-
-	3. Icon keys (Icons table near top of file):
-	     home, welcome, settings, save, config, user, info, server, main, player
-	     Add more with: Icons.myicon = "rbxassetid://123456789"
-
-	================================================================
-	PER-TAB MESSAGE BOX (tabMessages) — AUTO COLORS
-	================================================================
-	Put this at the TOP of every feature tab (skip Welcome if you want).
-
-	  tabMessages(PageX, {
-	      "<> First line — always green tip / how-to",
-	      "<> Second green tip",
-	      "$ Violet / pink highlight — important warning",
-	      "> Blue note — extra tip or report bugs",
-	  })
-
-	PREFIX RULES (automatic colors):
-	  "<> text"  →  GREEN   (normal instructions, how it works)
-	  "$ text"   →  VIOLET / PINK  (important, premium note, warning)
-	  "> text"   →  BLUE    (extra tip, discord, soft note)
-	  "text"     →  GREEN   (default if no prefix)
-
-	RECOMMENDED ORDER PER TAB:
-	  1. "<> Script made by KHUB · Kyiel Pambid"
-	  2. "<> How this tab works…"
-	  3. "$ Special / important note"
-	  4. "> If you find bugs, report on Discord."
-
-	EXAMPLE (Combat tab style):
-	  tabMessages(PageCombat, {
-	      "<> Script made by KHUB · Kyiel Pambid",
-	      "<> Enable Auto Follow, then stand still to track players.",
-	      "$ Bomb Follow needs a bomb equipped.",
-	      "> Report bugs on Discord if something breaks.",
-	  })
-
-	Do NOT put tabMessages on Welcome if the hero / profile already
-	explains the hub — use it on feature tabs only.
-
-	================================================================
-	HELPERS
-	================================================================
-	  section(page, "TITLE")           — card section
-	  addToggle(section, name, default, callback)
-	  addButton(section, name, callback, optionalColor)
-	  addSlider(section, name, min, max, default, callback)
-	  addTextbox(section, name, placeholder, callback)
-	  addLabel(section, text, size, color)
-	  tabMessages(page, { lines })    — green box instructions
-	  notify(title, text, isSuccess)  — top toast
-	  switchTab("Name")               — open a tab by name
-]]
 repeat task.wait() until game:IsLoaded()
 
 local Players = game:GetService("Players")
@@ -2754,3 +2692,32 @@ task.delay(12, function()
 	end)
 	pcall(function() setVisible(true) end)
 end)
+
+
+-- ============================================================
+-- PUBLIC API for game scripts
+-- ============================================================
+getgenv().KHUB = {
+	THEME = THEME,
+	Icons = Icons,
+	Keybinds = Keybinds,
+	createTab = createTab,
+	switchTab = switchTab,
+	section = section,
+	addToggle = addToggle,
+	addButton = addButton,
+	addSlider = addSlider,
+	addTextbox = addTextbox,
+	addLabel = addLabel,
+	tabMessages = tabMessages,
+	notify = notify,
+	resolveIcon = resolveIcon,
+	keyName = keyName,
+	keyFromName = keyFromName,
+	ScreenGui = ScreenGui,
+	Main = Main,
+	DISCORD = DISCORD,
+	YOUTUBE = YOUTUBE,
+	LOGO_ID = LOGO_ID,
+}
+print("[KHUB] UI Library API ready · getgenv().KHUB")
