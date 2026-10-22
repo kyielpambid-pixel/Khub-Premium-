@@ -1476,11 +1476,48 @@ end
 -- ============================================================
 -- TABS DEFINITION
 -- ============================================================
-local PageWelcome  = createTab("Welcome",  "Welcome",  1, "welcome")
-local PageMain     = createTab("Main",     "Main",     2, "main")
-local PagePlayer   = createTab("Player",   "Player",   3, "player")
-local PageSettings = createTab("Settings", "Settings", 4, "settings")
-local PageServer   = createTab("Server",   "Server",   5, "server")
+-- Default tabs only: Welcome · Config · Server
+-- Game scripts add more tabs with createTab(id, label, order, iconName)
+local PageWelcome = createTab("Welcome", "Welcome", 1, "welcome")
+local PageConfig  = createTab("Config",  "Config",  2, "save")
+local PageServer  = createTab("Server",  "Server",  3, "server")
+
+-- Game scripts register feature state here so Save/Load Config works
+local ConfigHooks = {}
+local cfgName = "default"
+local function registerConfig(key, getFn, setFn)
+	if type(key) ~= "string" or key == "" then return end
+	ConfigHooks[key] = { get = getFn, set = setFn }
+end
+local function collectConfig()
+	local data = {
+		Keybinds = { ToggleUI = keyName(Keybinds.ToggleUI) },
+		Features = {},
+		savedAt = os.date("%c"),
+	}
+	for k, hook in pairs(ConfigHooks) do
+		local ok, val = pcall(hook.get)
+		if ok then data.Features[k] = val end
+	end
+	return data
+end
+local function applyConfig(data)
+	if type(data) ~= "table" then return false end
+	if type(data.Keybinds) == "table" and data.Keybinds.ToggleUI then
+		Keybinds.ToggleUI = keyFromName(data.Keybinds.ToggleUI)
+	end
+	if type(data.Features) == "table" then
+		for k, val in pairs(data.Features) do
+			local hook = ConfigHooks[k]
+			if hook and hook.set then
+				pcall(hook.set, val)
+			end
+		end
+	end
+	return true
+end
+
+
 
 -- WELCOME PAGE
 do
@@ -1644,48 +1681,23 @@ end
 
 
 
--- MAIN PAGE (Ouroboros layout)
--- MAIN PAGE (template)
 do
-	tabMessages(PageMain, {
+	tabMessages(PageConfig, {
 		"<> Script made by KHUB · Kyiel Pambid",
-		"<> Template UI — add your features here.",
-		"$ Join Discord for more scripts.",
-		"> Toggle: RightShift / RightCtrl / K",
+		"<> Save / Load keeps keybinds and registered feature toggles.",
+		"$ Game scripts call registerConfig so their settings restore on Load.",
+		"> Toggle UI: RightShift / RightCtrl / K",
 	})
-	local s = section(PageMain, "INFO")
-	addLabel(s, "This is the KHUB UI template used by all scripts.", 12, THEME.text)
-end
-
-
--- PLAYER PAGE (template)
-do
-	tabMessages(PagePlayer, {
-		"<> Movement helpers live here on full scripts.",
-		"> Empty on template.",
-	})
-	local s = section(PagePlayer, "PLAYER")
-	addLabel(s, "Add walkspeed / fly / noclip on game scripts.", 12, THEME.dim)
-end
-
-
-do
-	tabMessages(PageSettings, {
-		"<> Script made by KHUB · Kyiel Pambid",
-		"<> UI-only shell for KHUB UI.",
-		"$ Tap floating Orb or press RightShift to toggle anytime.",
-		"> Config save keeps keybinds for later feature wiring.",
-	})
-	local cfgName = "default"
+	cfgName = "default"
 	
-	local util = collapsibleSection(PageSettings, "UTILITIES")
+	local util = collapsibleSection(PageConfig, "UTILITIES")
 	addToggle(util, "Anti-AFK", true, function(v) setAntiAfk(v) end)
 	addToggle(util, "No Gameplay Paused", true, function(v) S.NoGameplayPaused = v end)
 	addToggle(util, "Auto Reconnect on Kick", false, function(v) setAutoReconnect(v) end)
 	addToggle(util, "Disable 3D Rendering", false, function(v) setDisable3D(v) end)
 	addToggle(util, "FPS Boost", false, function(v) setFpsBoost(v) end)
 
-	local cfg = section(PageSettings, "CONFIG MANAGER")
+	local cfg = section(PageConfig, "CONFIG MANAGER")
 	addTextbox(cfg, "Config Name", "default", function(t)
 		cfgName = (t and t:gsub("%s+", "") ~= "") and t:gsub("%s+", "") or "default"
 	end)
@@ -1693,10 +1705,7 @@ do
 		pcall(function()
 			if isfolder and not isfolder(CONFIG_FOLDER) then makefolder(CONFIG_FOLDER) end
 			if writefile then
-				writefile(CONFIG_FOLDER .. "/" .. cfgName .. ".json", HttpService:JSONEncode({
-					Keybinds = { ToggleUI = keyName(Keybinds.ToggleUI) },
-					savedAt = os.date("%c"),
-				}))
+				writefile(CONFIG_FOLDER .. "/" .. cfgName .. ".json", HttpService:JSONEncode(collectConfig()))
 			end
 		end)
 		notify("Config Saved", cfgName .. ".json stored", true)
@@ -1705,8 +1714,7 @@ do
 		local ok, raw = pcall(function() return readfile(CONFIG_FOLDER .. "/" .. cfgName .. ".json") end)
 		if ok and raw then
 			local ok2, d = pcall(function() return HttpService:JSONDecode(raw) end)
-			if ok2 and type(d) == "table" and type(d.Keybinds) == "table" then
-				if d.Keybinds.ToggleUI then Keybinds.ToggleUI = keyFromName(d.Keybinds.ToggleUI) end
+			if ok2 and type(d) == "table" and applyConfig(d) then
 				notify("Config Loaded", cfgName .. ".json", true)
 			else notify("Config Error", "Invalid data format", false) end
 		else notify("Config Error", "File not found", false) end
@@ -1780,7 +1788,7 @@ do
 		end)
 		return row
 	end
-	local kb = section(PageSettings, "CONTROLS & KEYBINDS")
+	local kb = section(PageConfig, "CONTROLS & KEYBINDS")
 	addLabel(kb, "PC: Click button then press key. Esc clears keybind.", 11, THEME.dim)
 	addKeybindRow(kb, "Toggle UI", "ToggleUI")
 	addButton(kb, "Reset Keybinds to Default", function()
@@ -2697,6 +2705,19 @@ end)
 -- ============================================================
 -- PUBLIC API for game scripts
 -- ============================================================
+--[[
+	HOW TO ADD TABS (game scripts):
+	  local K = getgenv().KHUB
+	  local Page = K.createTab("Farm", "Farm", 10, "main")  -- order >= 10
+	  K.tabMessages(Page, { "<> green", "$ violet", "> blue" })
+	  local s = K.section(Page, "SECTION")
+	  K.addToggle(s, "Auto Farm", false, function(on) end)
+	  K.addSlider(s, "Speed", 1, 100, 16, function(v) end)
+	  K.addButton(s, "Click", function() end)
+
+	SAVE CONFIG (feature state):
+	  K.registerConfig("MyFeatures", function() return { Auto = true } end, function(data) end)
+]]
 getgenv().KHUB = {
 	THEME = THEME,
 	Icons = Icons,
@@ -2714,10 +2735,14 @@ getgenv().KHUB = {
 	resolveIcon = resolveIcon,
 	keyName = keyName,
 	keyFromName = keyFromName,
+	registerConfig = registerConfig,
+	collectConfig = collectConfig,
+	applyConfig = applyConfig,
 	ScreenGui = ScreenGui,
 	Main = Main,
 	DISCORD = DISCORD,
 	YOUTUBE = YOUTUBE,
 	LOGO_ID = LOGO_ID,
 }
-print("[KHUB] UI Library API ready · getgenv().KHUB")
+print("[KHUB] UI Library API ready · default tabs: Welcome · Config · Server")
+print("[KHUB] Game scripts add tabs with createTab — see comment above export")
