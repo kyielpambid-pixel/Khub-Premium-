@@ -938,6 +938,19 @@ local function switchTab(id)
 end
 
 local function createTab(id, label, order, iconName)
+	-- Welcome + Config always stay on top; custom tabs start at order 10+
+	local idKey = tostring(id or "")
+	if idKey == "Welcome" then
+		order = 1
+	elseif idKey == "Config" then
+		order = 2
+	elseif idKey == "Server" then
+		order = 90
+	else
+		order = math.max(tonumber(order) or 10, 10)
+	end
+	iconName = iconName or "home"
+
 	local btn = Instance.new("TextButton")
 	btn.Name = id
 	btn.Size = UDim2.new(1, 0, 0, 34)
@@ -1480,7 +1493,7 @@ end
 -- Game scripts add more tabs with createTab(id, label, order, iconName)
 local PageWelcome = createTab("Welcome", "Welcome", 1, "welcome")
 local PageConfig  = createTab("Config",  "Config",  2, "save")
-local PageServer  = createTab("Server",  "Server",  3, "server")
+local PageServer  = createTab("Server",  "Server",  90, "server")
 
 -- Game scripts register feature state here so Save/Load Config works
 local ConfigHooks = {}
@@ -2706,17 +2719,38 @@ end)
 -- PUBLIC API for game scripts
 -- ============================================================
 --[[
-	HOW TO ADD TABS (game scripts):
+	DEFAULT TABS (always on top, do not recreate):
+	  1 Welcome
+	  2 Config  (Save / Load / Delete)
+	  Server stays near the bottom
+
+	HOW TO ADD A TAB WITH ICON (game scripts only):
 	  local K = getgenv().KHUB
-	  local Page = K.createTab("Farm", "Farm", 10, "main")  -- order >= 10
-	  K.tabMessages(Page, { "<> green", "$ violet", "> blue" })
-	  local s = K.section(Page, "SECTION")
+
+	  -- createTab(id, label, order, iconName)
+	  -- order: use 10, 11, 12... so Welcome + Config stay on top
+	  -- iconName options:
+	  --   home, welcome, main, player, user, info,
+	  --   settings, save, config, server
+
+	  local Page = K.createTab("Farm", "Farm", 10, "main")
+	  K.tabMessages(Page, {
+	      "<> green message",
+	      "$ violet message",
+	      "> blue message",
+	  })
+	  local s = K.section(Page, "SECTION NAME")
 	  K.addToggle(s, "Auto Farm", false, function(on) end)
 	  K.addSlider(s, "Speed", 1, 100, 16, function(v) end)
-	  K.addButton(s, "Click", function() end)
+	  K.addButton(s, "Run Once", function() end)
+	  K.addLabel(s, "Note text")
 
-	SAVE CONFIG (feature state):
-	  K.registerConfig("MyFeatures", function() return { Auto = true } end, function(data) end)
+	SAVE / LOAD FEATURE CONFIG:
+	  K.registerConfig("MyScript", function()
+	      return { AutoFarm = true, Speed = 16 }
+	  end, function(data)
+	      -- apply loaded table
+	  end)
 ]]
 getgenv().KHUB = {
 	THEME = THEME,
@@ -2736,6 +2770,7 @@ getgenv().KHUB = {
 	keyName = keyName,
 	keyFromName = keyFromName,
 	registerConfig = registerConfig,
+	collapsibleSection = collapsibleSection,
 	collectConfig = collectConfig,
 	applyConfig = applyConfig,
 	ScreenGui = ScreenGui,
