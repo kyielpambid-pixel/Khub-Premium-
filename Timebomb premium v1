@@ -1,0 +1,4333 @@
+repeat task.wait() until game:IsLoaded()
+
+local Players = game:GetService("Players")
+local TweenService = game:GetService("TweenService")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local CoreGui = game:GetService("CoreGui")
+local Workspace = game:GetService("Workspace")
+local HttpService = game:GetService("HttpService")
+local Lighting = game:GetService("Lighting")
+local TextService = game:GetService("TextService")
+local TeleportService = game:GetService("TeleportService")
+
+local LocalPlayer = Players.LocalPlayer
+local player = LocalPlayer
+
+if not table.clear then
+	function table.clear(t)
+		for k in pairs(t) do t[k] = nil end
+	end
+end
+if not table.find then
+	function table.find(t, v)
+		for i, x in ipairs(t) do if x == v then return i end end
+		return nil
+	end
+end
+if not LocalPlayer then
+	pcall(function()
+		Players:GetPropertyChangedSignal("LocalPlayer"):Wait()
+	end)
+	LocalPlayer = Players.LocalPlayer
+	player = LocalPlayer
+end
+
+local LOGO_ID = "rbxassetid://116838166946511"
+local BG_ID   = "rbxassetid://127230219966945"
+local DISCORD = "https://discord.gg/EKPb7BRDH8"
+local YOUTUBE = "https://www.youtube.com/@kyielpambid"
+local Keybinds = { ToggleUI = Enum.KeyCode.RightShift }
+local function keyName(kc)
+	if not kc or kc == Enum.KeyCode.Unknown then return "None" end
+	return tostring(kc):gsub("Enum.KeyCode.", "")
+end
+local function keyFromName(name)
+	if not name or name == "" or name == "None" then return Enum.KeyCode.Unknown end
+	local ok, kc = pcall(function() return Enum.KeyCode[name] end)
+	return (ok and kc) or Enum.KeyCode.Unknown
+end
+local isMobile = UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled
+local CONFIG_FOLDER = "KHUB_Timebomb_Configs"
+local ScriptAlive = true
+local Camera = Workspace.CurrentCamera
+
+print("[KHUB Timebomb] starting...")
+
+local KEY_FILE = "KHUB_Timebomb_CustomKey.json"
+
+-- Rotating keys (must be used in order when previous expires)
+-- index 1 = 24h, index 2 = 34h, index 3 = 34h, then back to 1
+local ROTATING = {
+	{ key = "Khub-=√π√|€¢£~`|÷§", hours = 24 },
+	{ key = "Khub=526864576&-#_+)/)+&:!;'$_-86326", hours = 34 },
+	{ key = "Khub-=j(-$9&/8_7683863573(64)7&+)-/-08_73(628", hours = 34 },
+}
+local PERM_KEY = "Kyielpogi"
+
+local function cleanKey(raw)
+	local t = tostring(raw or "")
+	t = string.gsub(t, "^%s+", "")
+	t = string.gsub(t, "%s+$", "")
+	t = string.gsub(t, "[\r\n\t]", "")
+	return t
+end
+
+local function keysEqual(a, b)
+	return cleanKey(a) == cleanKey(b)
+end
+
+local function saveState(state)
+	pcall(function()
+		if writefile then
+			writefile(KEY_FILE, HttpService:JSONEncode(state))
+		end
+	end)
+end
+
+local function loadState()
+	local ok, data = pcall(function()
+		if isfile and isfile(KEY_FILE) and readfile then
+			return HttpService:JSONDecode(readfile(KEY_FILE))
+		end
+	end)
+	if ok and type(data) == "table" then
+		return data
+	end
+	return nil
+end
+
+local function clearState()
+	pcall(function()
+		if isfile and isfile(KEY_FILE) and delfile then
+			delfile(KEY_FILE)
+		end
+	end)
+end
+
+local function formatTimeLeft(sec)
+	if sec <= 0 then return "Expired" end
+	local d = math.floor(sec / 86400)
+	local h = math.floor((sec % 86400) / 3600)
+	local m = math.floor((sec % 3600) / 60)
+	if d > 0 then return string.format("%dd %dh %dm", d, h, m) end
+	if h > 0 then return string.format("%dh %dm", h, m) end
+	return string.format("%dm", m)
+end
+
+-- state fields:
+--   perm = true  → permanent unlock
+--   index = 1..3 → which rotating key is active
+--   expire = unix timestamp
+local state = loadState() or {}
+local keyUnlocked = false
+
+local function isActive()
+	if state.perm == true then
+		return true
+	end
+	local exp = tonumber(state.expire) or 0
+	if exp > os.time() and type(state.index) == "number" then
+		return true
+	end
+	return false
+end
+
+if isActive() then
+	keyUnlocked = true
+	_G.KHUB_KeyExpire = state.perm and 0 or (tonumber(state.expire) or 0)
+	_G.KHUB_KeyPerm = state.perm == true
+	print("[KHUB Timebomb] Key auto-unlocked")
+end
+
+-- Which rotating key is required NEXT (when current expired / none)
+local function requiredIndex()
+	if type(state.index) == "number" and state.index >= 1 and state.index <= #ROTATING then
+		local exp = tonumber(state.expire) or 0
+		if exp > os.time() then
+			-- still active: same index (re-enter same key ok)
+			return state.index
+		end
+		-- expired → next in rotation
+		return (state.index % #ROTATING) + 1
+	end
+	-- first time: key 1
+	return 1
+end
+
+if not keyUnlocked then
+	local parentGui
+	pcall(function()
+		if gethui then parentGui = gethui() end
+	end)
+	if not parentGui then
+		pcall(function() parentGui = CoreGui end)
+	end
+	if not parentGui then
+		parentGui = LocalPlayer:WaitForChild("PlayerGui")
+	end
+
+	pcall(function()
+		local old = parentGui:FindFirstChild("KHUB_KeyGate")
+		if old then old:Destroy() end
+	end)
+
+	local KeyGui = Instance.new("ScreenGui")
+	KeyGui.Name = "KHUB_KeyGate"
+	KeyGui.ResetOnSpawn = false
+	KeyGui.IgnoreGuiInset = true
+	KeyGui.DisplayOrder = 2147483000
+	KeyGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+	KeyGui.Parent = parentGui
+
+	local function corner(o, r)
+		local c = Instance.new("UICorner")
+		c.CornerRadius = UDim.new(0, r or 10)
+		c.Parent = o
+	end
+
+	local KeyFrame = Instance.new("Frame")
+	KeyFrame.Size = UDim2.new(0, 320, 0, 310)
+	KeyFrame.Position = UDim2.new(0.5, -160, 0.5, -155)
+	KeyFrame.BackgroundColor3 = Color3.fromRGB(14, 10, 22)
+	KeyFrame.BorderSizePixel = 0
+	KeyFrame.Parent = KeyGui
+	corner(KeyFrame, 14)
+	local st = Instance.new("UIStroke")
+	st.Color = Color3.fromRGB(160, 100, 255)
+	st.Thickness = 1.4
+	st.Transparency = 0.3
+	st.Parent = KeyFrame
+
+	local title = Instance.new("TextLabel")
+	title.Size = UDim2.new(1, -24, 0, 26)
+	title.Position = UDim2.fromOffset(12, 14)
+	title.BackgroundTransparency = 1
+	title.Text = "KHUB · Key System"
+	title.Font = Enum.Font.GothamBlack
+	title.TextSize = 17
+	title.TextColor3 = Color3.fromRGB(255, 200, 255)
+	title.TextXAlignment = Enum.TextXAlignment.Left
+	title.Parent = KeyFrame
+
+	local needIdx = requiredIndex()
+	local needHours = ROTATING[needIdx].hours
+
+	local sub = Instance.new("TextLabel")
+	sub.Size = UDim2.new(1, -24, 0, 40)
+	sub.Position = UDim2.fromOffset(12, 44)
+	sub.BackgroundTransparency = 1
+	sub.Text = "Timebomb Premium\nNeed key #" .. needIdx .. "  ·  " .. needHours .. "h duration"
+	sub.Font = Enum.Font.Gotham
+	sub.TextSize = 12
+	sub.TextColor3 = Color3.fromRGB(160, 140, 190)
+	sub.TextXAlignment = Enum.TextXAlignment.Left
+	sub.TextYAlignment = Enum.TextYAlignment.Top
+	sub.Parent = KeyFrame
+
+	local keyBox = Instance.new("TextBox")
+	keyBox.Size = UDim2.new(1, -24, 0, 36)
+	keyBox.Position = UDim2.fromOffset(12, 96)
+	keyBox.BackgroundColor3 = Color3.fromRGB(22, 16, 34)
+	keyBox.Text = ""
+	keyBox.PlaceholderText = "Paste key here"
+	keyBox.Font = Enum.Font.Gotham
+	keyBox.TextSize = 13
+	keyBox.TextColor3 = Color3.fromRGB(240, 240, 255)
+	keyBox.PlaceholderColor3 = Color3.fromRGB(110, 95, 140)
+	keyBox.ClearTextOnFocus = false
+	keyBox.TextXAlignment = Enum.TextXAlignment.Left
+	keyBox.Parent = KeyFrame
+	corner(keyBox, 8)
+	local pad = Instance.new("UIPadding")
+	pad.PaddingLeft = UDim.new(0, 8)
+	pad.Parent = keyBox
+
+	local genBtn = Instance.new("TextButton")
+	genBtn.Size = UDim2.new(0.48, -6, 0, 34)
+	genBtn.Position = UDim2.fromOffset(12, 144)
+	genBtn.BackgroundColor3 = Color3.fromRGB(50, 30, 90)
+	genBtn.Text = "Copy Discord"
+	genBtn.Font = Enum.Font.GothamBold
+	genBtn.TextSize = 12
+	genBtn.TextColor3 = Color3.fromRGB(255, 200, 255)
+	genBtn.Parent = KeyFrame
+	corner(genBtn, 8)
+
+	local submitBtn = Instance.new("TextButton")
+	submitBtn.Size = UDim2.new(0.48, -6, 0, 34)
+	submitBtn.Position = UDim2.new(0.52, 0, 0, 144)
+	submitBtn.BackgroundColor3 = Color3.fromRGB(40, 140, 80)
+	submitBtn.Text = "Submit Key"
+	submitBtn.Font = Enum.Font.GothamBold
+	submitBtn.TextSize = 13
+	submitBtn.TextColor3 = Color3.new(1, 1, 1)
+	submitBtn.Parent = KeyFrame
+	corner(submitBtn, 8)
+
+	local keyStatus = Instance.new("TextLabel")
+	keyStatus.Size = UDim2.new(1, -24, 0, 90)
+	keyStatus.Position = UDim2.fromOffset(12, 190)
+	keyStatus.BackgroundTransparency = 1
+	keyStatus.Text = "Rotating keys · use in order when expired\nKey #1 = 24h · Key #2 = 34h · Key #3 = 34h\nPerm key always works"
+	keyStatus.Font = Enum.Font.Gotham
+	keyStatus.TextSize = 11
+	keyStatus.TextColor3 = Color3.fromRGB(160, 130, 190)
+	keyStatus.TextWrapped = true
+	keyStatus.TextYAlignment = Enum.TextYAlignment.Top
+	keyStatus.Parent = KeyFrame
+
+	genBtn.MouseButton1Click:Connect(function()
+		pcall(function()
+			if setclipboard then
+				setclipboard(DISCORD)
+			elseif toclipboard then
+				toclipboard(DISCORD)
+			end
+		end)
+		keyStatus.Text = "Discord copied"
+		keyStatus.TextColor3 = Color3.fromRGB(180, 220, 255)
+	end)
+
+	local function tryUnlock(raw)
+		local input = cleanKey(raw)
+		if input == "" then
+			keyStatus.Text = "Enter a key first"
+			keyStatus.TextColor3 = Color3.fromRGB(255, 100, 100)
+			return
+		end
+
+		-- Permanent key
+		if keysEqual(input, PERM_KEY) then
+			state = { perm = true, index = 0, expire = 0 }
+			saveState(state)
+			_G.KHUB_KeyExpire = 0
+			_G.KHUB_KeyPerm = true
+			keyStatus.Text = "PERMANENT ACCESS"
+			keyStatus.TextColor3 = Color3.fromRGB(120, 255, 160)
+			task.wait(0.35)
+			keyUnlocked = true
+			pcall(function() KeyGui:Destroy() end)
+			return
+		end
+
+		local need = requiredIndex()
+		local matchedIndex = nil
+		for i, entry in ipairs(ROTATING) do
+			if keysEqual(input, entry.key) then
+				matchedIndex = i
+				break
+			end
+		end
+
+		if not matchedIndex then
+			keyStatus.Text = "Invalid key"
+			keyStatus.TextColor3 = Color3.fromRGB(255, 100, 100)
+			return
+		end
+
+		-- Still active with this same key → refresh ok / just unlock
+		local exp = tonumber(state.expire) or 0
+		if state.index == matchedIndex and exp > os.time() then
+			keyStatus.Text = "Still active · " .. formatTimeLeft(exp - os.time())
+			keyStatus.TextColor3 = Color3.fromRGB(120, 255, 160)
+			task.wait(0.3)
+			keyUnlocked = true
+			pcall(function() KeyGui:Destroy() end)
+			return
+		end
+
+		-- Must use the required next key
+		if matchedIndex ~= need then
+			keyStatus.Text = "Wrong key · need key #" .. need .. " right now\n(Key #" .. matchedIndex .. " is not active yet)"
+			keyStatus.TextColor3 = Color3.fromRGB(255, 160, 80)
+			return
+		end
+
+		local hours = ROTATING[matchedIndex].hours
+		local newExp = os.time() + (hours * 3600)
+		state = {
+			perm = false,
+			index = matchedIndex,
+			expire = newExp,
+		}
+		saveState(state)
+		_G.KHUB_KeyExpire = newExp
+		_G.KHUB_KeyPerm = false
+		keyStatus.Text = "Access granted · key #" .. matchedIndex .. "\n" .. formatTimeLeft(hours * 3600) .. " remaining"
+		keyStatus.TextColor3 = Color3.fromRGB(120, 255, 160)
+		task.wait(0.4)
+		keyUnlocked = true
+		pcall(function() KeyGui:Destroy() end)
+	end
+
+	submitBtn.MouseButton1Click:Connect(function()
+		tryUnlock(keyBox.Text)
+	end)
+	keyBox.FocusLost:Connect(function(enter)
+		if enter then
+			tryUnlock(keyBox.Text)
+		end
+	end)
+
+	repeat task.wait(0.1) until keyUnlocked
+end
+
+
+-- Feature state
+local hitboxEnabled = false
+local hitboxSize = 7
+local hitboxTorso, hitboxArms, hitboxLegs = 5, 5, 5
+local hitboxMode = "V1"
+local hitboxData = {}
+local hitboxTransparent = true
+local autoFollow = false
+local autoFollowV1 = false
+local autoFaceNearby = false
+
+-- Red zones: when stopped on an enabled zone, pause both auto-follows so Double Deck can fire
+local RedDeck = {
+	zone1 = false,
+	zone2 = false,
+	pos1 = Vector3.new(99.0044861, 3.99999928, -57.7142601),
+	pos2 = Vector3.new(134.93866, 3.99999928, -57.6599274),
+	radius = 3.25,
+}
+
+local function isStoppedOnActiveRedZone(hrp, hum)
+	if not hrp then return false end
+	local moving = hum and hum.MoveDirection.Magnitude > 0.05
+	local fast = hrp.AssemblyLinearVelocity.Magnitude > 1.5
+	if moving or fast then return false end
+	local p = hrp.Position
+	if RedDeck.zone1 and (p - RedDeck.pos1).Magnitude <= RedDeck.radius then
+		return true
+	end
+	if RedDeck.zone2 and (p - RedDeck.pos2).Magnitude <= RedDeck.radius then
+		return true
+	end
+	return false
+end
+
+local playerESP = false
+local bombESP = false
+local espObjects = {}
+local bombEspObjects = {}
+local autoFlick = false
+local autoFlickMode = "Mode 1"
+local flickBusy = false
+local infJump = false
+local infJumpMode = "Original"
+local lastInfJump = 0
+local wallhopV1 = false
+local wallhopV2 = false
+local wallhopCd = false
+local touchingWall = false
+local tpWalk = false
+local tpWalkMult = 1
+local antiDetectV1 = false
+local antiDetectV2 = false
+local headless = false
+local korblox = false
+local fpsV1, fpsV2 = false, false
+local fpsV3 = false
+local savedLightingV3 = {}
+local savedLighting = {}
+
+local EXPAND_PARTS = {
+	"Head", "Torso", "UpperTorso", "LowerTorso",
+	"Left Arm", "Right Arm", "Left Leg", "Right Leg",
+	"LeftUpperArm", "LeftLowerArm", "LeftHand",
+	"RightUpperArm", "RightLowerArm", "RightHand",
+	"LeftUpperLeg", "LeftLowerLeg", "LeftFoot",
+	"RightUpperLeg", "RightLowerLeg", "RightFoot",
+	"HumanoidRootPart",
+}
+
+local function Notify(t, c)
+	print("[KHUB Timebomb]", t, c or "")
+end
+
+local function lerpColor(a, b, t)
+	return Color3.new(a.R + (b.R - a.R) * t, a.G + (b.G - a.G) * t, a.B + (b.B - a.B) * t)
+end
+
+-- Hitbox
+local function clearHitbox(char)
+	if not char then return end
+	if hitboxData[char] then
+		local data = hitboxData[char]
+		if data.parts then
+			for part, orig in pairs(data.parts) do
+				if part and part.Parent then
+					pcall(function()
+						part.Size = orig.Size
+						part.Transparency = orig.Transparency
+						part.Massless = orig.Massless
+						part.CanCollide = orig.CanCollide
+					end)
+				end
+			end
+		end
+		hitboxData[char] = nil
+	end
+	local hrp = char:FindFirstChild("HumanoidRootPart")
+	if hrp then
+		local vis = hrp:FindFirstChild("KHUB_HitboxVis")
+		if vis then vis:Destroy() end
+	end
+end
+
+local function applyHitboxV1(char)
+	if not char or not char.Parent then return end
+	local hrp = char:FindFirstChild("HumanoidRootPart")
+	if not hrp then return end
+	clearHitbox(char)
+	local size = math.clamp(hitboxSize, 3, 13)
+	local partsBackup = {}
+	for _, name in ipairs(EXPAND_PARTS) do
+		local part = char:FindFirstChild(name)
+		if part and part:IsA("BasePart") then
+			partsBackup[part] = {
+				Size = part.Size,
+				Transparency = part.Transparency,
+				Massless = part.Massless,
+				CanCollide = part.CanCollide,
+			}
+			pcall(function()
+				if part.Name == "Head" then
+					part.Size = Vector3.new(size * 0.85, size * 0.85, size * 0.85)
+					part.Transparency = hitboxTransparent and 0.15 or part.Transparency
+				elseif part.Name == "HumanoidRootPart" then
+					part.Size = Vector3.new(size, size * 1.1, size)
+					part.Transparency = 1
+					part.CanCollide = false
+				else
+					local o = partsBackup[part].Size
+					local scale = size / 2
+					part.Size = Vector3.new(
+						math.max(o.X * scale, size * 0.4),
+						math.max(o.Y * scale, size * 0.5),
+						math.max(o.Z * scale, size * 0.4)
+					)
+					part.Transparency = hitboxTransparent and 0.85 or part.Transparency
+					part.CanCollide = false
+				end
+				part.Massless = true
+			end)
+		end
+	end
+	local vis = Instance.new("Part")
+	vis.Name = "KHUB_HitboxVis"
+	vis.Shape = Enum.PartType.Cylinder
+	vis.Size = Vector3.new(0.15, size * 1.15, size * 1.15)
+	vis.Color = Color3.fromRGB(255, 170, 50)
+	vis.Material = Enum.Material.Neon
+	vis.Transparency = 0.55
+	vis.Anchored = true
+	vis.CanCollide = false
+	vis.CastShadow = false
+	vis.Parent = hrp
+	hitboxData[char] = { parts = partsBackup, vis = vis }
+end
+
+local function applyHitboxV2(plr)
+	local char = plr.Character
+	if not char then return end
+	clearHitbox(char)
+	local map = {
+		Head = hitboxTorso, HumanoidRootPart = hitboxTorso, Torso = hitboxTorso,
+		UpperTorso = hitboxTorso, LowerTorso = hitboxTorso,
+		["Left Arm"] = hitboxArms, ["Right Arm"] = hitboxArms,
+		LeftUpperArm = hitboxArms, RightUpperArm = hitboxArms,
+		LeftLowerArm = hitboxArms, RightLowerArm = hitboxArms,
+		["Left Leg"] = hitboxLegs, ["Right Leg"] = hitboxLegs,
+		LeftUpperLeg = hitboxLegs, RightUpperLeg = hitboxLegs,
+		LeftLowerLeg = hitboxLegs, RightLowerLeg = hitboxLegs,
+	}
+	local partsBackup = {}
+	for name, sz in pairs(map) do
+		local part = char:FindFirstChild(name)
+		if part and part:IsA("BasePart") then
+			partsBackup[part] = {
+				Size = part.Size,
+				Transparency = part.Transparency,
+				Massless = part.Massless,
+				CanCollide = part.CanCollide,
+			}
+			part.Size = Vector3.new(sz, sz, sz)
+			part.Transparency = 1
+			part.CanCollide = false
+			pcall(function()
+				part.CustomPhysicalProperties = PhysicalProperties.new(0, 0, 0, 0, 0)
+			end)
+		end
+	end
+	hitboxData[char] = { parts = partsBackup }
+end
+
+local function applyAllHitboxes()
+	for _, plr in ipairs(Players:GetPlayers()) do
+		if plr ~= LocalPlayer and plr.Character then
+			if hitboxMode == "V1" then applyHitboxV1(plr.Character) else applyHitboxV2(plr) end
+		end
+	end
+end
+
+local function clearAllHitboxes()
+	for _, plr in ipairs(Players:GetPlayers()) do
+		if plr.Character then clearHitbox(plr.Character) end
+	end
+end
+
+local function waitCharReady(char, timeout)
+	timeout = timeout or 6
+	local t0 = os.clock()
+	while os.clock() - t0 < timeout do
+		if not char or not char.Parent then return false end
+		local hrp = char:FindFirstChild("HumanoidRootPart")
+		local hum = char:FindFirstChildOfClass("Humanoid")
+		if hrp and hum then
+			task.wait(0.2)
+			return true
+		end
+		task.wait(0.05)
+	end
+	return char ~= nil and char:FindFirstChild("HumanoidRootPart") ~= nil
+end
+
+local function applyHeadless(char)
+	if not char then return end
+	local head = char:FindFirstChild("Head")
+	if head and head:IsA("BasePart") then
+		head.Transparency = 1
+		for _, d in ipairs(head:GetDescendants()) do
+			if d:IsA("Decal") or d:IsA("Texture") then
+				d.Transparency = 1
+			end
+		end
+	end
+	for _, acc in ipairs(char:GetChildren()) do
+		if acc:IsA("Accessory") then
+			local n = string.lower(acc.Name)
+			if n:find("hair") or n:find("hat") or n:find("face") or n:find("head")
+				or n:find("hood") or n:find("hairline") or n:find("bundle") then
+				for _, p in ipairs(acc:GetDescendants()) do
+					if p:IsA("BasePart") then
+						p.Transparency = 1
+					elseif p:IsA("Decal") or p:IsA("Texture") then
+						p.Transparency = 1
+					end
+				end
+			end
+		end
+	end
+end
+
+local function applyKorblox(char)
+	if not char then return end
+	-- R6 Right Leg classic Korblox mesh
+	local r6 = char:FindFirstChild("Right Leg")
+	if r6 and r6:IsA("BasePart") then
+		pcall(function()
+			for _, d in ipairs(r6:GetChildren()) do
+				if d:IsA("SpecialMesh") or d:IsA("CylinderMesh") or d:IsA("BlockMesh") then
+					d:Destroy()
+				end
+			end
+			local mesh = Instance.new("SpecialMesh")
+			mesh.Name = "KHUB_KorbloxMesh"
+			mesh.MeshId = "rbxassetid://90294293"
+			mesh.TextureId = "rbxassetid://90294286"
+			mesh.Scale = Vector3.new(1, 1, 1)
+			mesh.Parent = r6
+			r6.Color = Color3.fromRGB(27, 42, 53)
+			r6.Material = Enum.Material.Plastic
+		end)
+	end
+	-- R15 right leg chain
+	for _, name in ipairs({"RightUpperLeg", "RightLowerLeg", "RightFoot"}) do
+		local part = char:FindFirstChild(name)
+		if part and part:IsA("BasePart") then
+			pcall(function()
+				part.Color = Color3.fromRGB(27, 42, 53)
+				part.Material = Enum.Material.SmoothPlastic
+				for _, d in ipairs(part:GetDescendants()) do
+					if d:IsA("Decal") or d:IsA("Texture") then
+						d.Transparency = 1
+					end
+				end
+				-- strip clothing wraps on leg
+				for _, d in ipairs(part:GetChildren()) do
+					if d:IsA("WrapLayer") or d:IsA("WrapTarget") then
+						pcall(function() d:Destroy() end)
+					end
+				end
+			end)
+		end
+	end
+end
+
+local function applyLocalCosmetics(char)
+	if not char then return end
+	if headless then applyHeadless(char) end
+	if korblox then applyKorblox(char) end
+end
+
+local function hookPlayerHitbox(plr)
+	if plr == LocalPlayer then return end
+	plr.CharacterAdded:Connect(function(char)
+		task.spawn(function()
+			if not waitCharReady(char, 8) then return end
+			if hitboxEnabled and ScriptAlive then
+				if hitboxMode == "V1" then
+					applyHitboxV1(char)
+				else
+					applyHitboxV2(plr)
+				end
+			end
+		end)
+	end)
+	-- already alive
+	if plr.Character and hitboxEnabled then
+		task.spawn(function()
+			if waitCharReady(plr.Character, 8) then
+				if hitboxMode == "V1" then
+					applyHitboxV1(plr.Character)
+				else
+					applyHitboxV2(plr)
+				end
+			end
+		end)
+	end
+end
+
+Players.PlayerAdded:Connect(hookPlayerHitbox)
+for _, plr in ipairs(Players:GetPlayers()) do
+	hookPlayerHitbox(plr)
+end
+
+-- Local cosmetics survive death / respawn
+LocalPlayer.CharacterAdded:Connect(function(char)
+	task.spawn(function()
+		if not waitCharReady(char, 8) then return end
+		applyLocalCosmetics(char)
+		-- re-apply a few times while character finishes loading
+		for _ = 1, 6 do
+			task.wait(0.4)
+			if not ScriptAlive or not char.Parent then break end
+			applyLocalCosmetics(char)
+		end
+	end)
+end)
+if LocalPlayer.Character then
+	task.spawn(function()
+		applyLocalCosmetics(LocalPlayer.Character)
+	end)
+end
+
+-- Keep hitbox + cosmetics alive even after death / reset
+local lastHitboxRefresh = 0
+local lastCosmeticTick = 0
+RunService.Heartbeat:Connect(function()
+	if not ScriptAlive then return end
+	local now = os.clock()
+
+	-- cosmetics throttled (less lag)
+	if (headless or korblox) and now - (lastCosmeticTick or 0) > 0.55 then
+		lastCosmeticTick = now
+		local char = LocalPlayer.Character
+		if char then
+			if headless then
+				local head = char:FindFirstChild("Head")
+				if head and head.Transparency < 0.9 then
+					applyHeadless(char)
+				end
+			end
+			if korblox then
+				applyKorblox(char)
+			end
+		end
+	end
+
+	-- hitbox re-apply if lost after death
+	if hitboxEnabled and now - lastHitboxRefresh > 2.0 then
+		lastHitboxRefresh = now
+		for _, plr in ipairs(Players:GetPlayers()) do
+			if plr ~= LocalPlayer and plr.Character then
+				local char = plr.Character
+				local hrp = char:FindFirstChild("HumanoidRootPart")
+				if hrp then
+					local need = false
+					if not hitboxData[char] then
+						need = true
+					elseif hitboxMode == "V1" then
+						local size = math.clamp(hitboxSize, 3, 13)
+						if math.abs(hrp.Size.X - size) > 0.75 then
+							need = true
+						end
+					end
+					if need then
+						if hitboxMode == "V1" then
+							applyHitboxV1(char)
+						else
+							applyHitboxV2(plr)
+						end
+					end
+				end
+			end
+		end
+	end
+end)
+
+local floorRing, floorRingOuter
+local ringSpin = 0
+local function ensureFloorRing(on)
+	if on then
+		if not floorRing or not floorRing.Parent then
+			floorRing = Instance.new("Part")
+			floorRing.Name = "KHUB_PremiumRing"
+			floorRing.Shape = Enum.PartType.Cylinder
+			floorRing.Size = Vector3.new(0.14, 6.5, 6.5)
+			floorRing.Color = Color3.fromRGB(255, 195, 70)
+			floorRing.Material = Enum.Material.Neon
+			floorRing.Transparency = 0.35
+			floorRing.Anchored = true
+			floorRing.CanCollide = false
+			floorRing.CastShadow = false
+			floorRing.Parent = Workspace
+		end
+		if not floorRingOuter or not floorRingOuter.Parent then
+			floorRingOuter = Instance.new("Part")
+			floorRingOuter.Name = "KHUB_PremiumRingOuter"
+			floorRingOuter.Shape = Enum.PartType.Cylinder
+			floorRingOuter.Size = Vector3.new(0.08, 8.2, 8.2)
+			floorRingOuter.Color = Color3.fromRGB(220, 50, 60)
+			floorRingOuter.Material = Enum.Material.Neon
+			floorRingOuter.Transparency = 0.55
+			floorRingOuter.Anchored = true
+			floorRingOuter.CanCollide = false
+			floorRingOuter.CastShadow = false
+			floorRingOuter.Parent = Workspace
+		end
+	else
+		if floorRing then floorRing:Destroy() floorRing = nil end
+		if floorRingOuter then floorRingOuter:Destroy() floorRingOuter = nil end
+	end
+end
+
+RunService.RenderStepped:Connect(function(dt)
+	if not ScriptAlive then return end
+	if hitboxEnabled then
+		local char = LocalPlayer.Character
+		local hrp = char and char:FindFirstChild("HumanoidRootPart")
+		ringSpin = ringSpin + (dt or 0.016) * 1.2
+		if hrp and floorRing then
+			local s = (hitboxMode == "V1") and math.clamp(hitboxSize, 3, 13) * 1.15 or math.max(hitboxTorso, 5) * 1.15
+			local pulse = 1 + math.sin(os.clock() * 3.2) * 0.04
+			floorRing.Size = Vector3.new(0.14, s * pulse, s * pulse)
+			floorRing.CFrame = hrp.CFrame * CFrame.new(0, -3.05, 0) * CFrame.Angles(0, ringSpin, math.rad(90))
+			if floorRingOuter then
+				floorRingOuter.Size = Vector3.new(0.08, s * 1.28 * pulse, s * 1.28 * pulse)
+				floorRingOuter.CFrame = hrp.CFrame * CFrame.new(0, -3.12, 0) * CFrame.Angles(0, -ringSpin * 0.7, math.rad(90))
+			end
+		end
+		for c, data in pairs(hitboxData) do
+			if data.vis and data.vis.Parent and c:FindFirstChild("HumanoidRootPart") then
+				data.vis.CFrame = c.HumanoidRootPart.CFrame * CFrame.new(0, -2.8, 0) * CFrame.Angles(0, 0, math.rad(90))
+			end
+		end
+	end
+end)
+
+-- Anti detect V1
+pcall(function()
+	if not hookmetamethod or not getnamecallmethod or not newcclosure then return end
+	local old
+	old = hookmetamethod(game, "__namecall", newcclosure(function(self, ...)
+		local method = getnamecallmethod()
+		if antiDetectV1 and (method == "Kick" or method == "kick") and self == LocalPlayer then
+			return
+		end
+		return old(self, ...)
+	end))
+end)
+
+RunService.Heartbeat:Connect(function()
+	if not antiDetectV2 then return end
+	local char = LocalPlayer.Character
+	local hrp = char and char:FindFirstChild("HumanoidRootPart")
+	if hrp and hrp.AssemblyLinearVelocity.Magnitude > 90 then
+		hrp.AssemblyLinearVelocity = Vector3.new(0, hrp.AssemblyLinearVelocity.Y, 0)
+	end
+end)
+
+-- Auto Face Nearby (public old Timebomb logic)
+-- Skips while flicking or touching wall so Auto Flick / Wallhop can work
+RunService.RenderStepped:Connect(function()
+	if not ScriptAlive or not autoFaceNearby then return end
+	if flickBusy then return end
+	if touchingWall then return end
+	local char = LocalPlayer.Character
+	local hrp = char and char:FindFirstChild("HumanoidRootPart")
+	if not hrp then return end
+	local closest, dist = nil, math.huge
+	for _, p in ipairs(Players:GetPlayers()) do
+		if p ~= LocalPlayer and p.Character then
+			local tHRP = p.Character:FindFirstChild("HumanoidRootPart")
+			if tHRP then
+				local d = (hrp.Position - tHRP.Position).Magnitude
+				if d < dist then
+					dist = d
+					closest = tHRP
+				end
+			end
+		end
+	end
+	if closest then
+		hrp.CFrame = CFrame.new(
+			hrp.Position,
+			Vector3.new(closest.Position.X, hrp.Position.Y, closest.Position.Z)
+		)
+	end
+end)
+
+-- Auto follow
+local lastJitter = 0
+local jitter = Vector3.zero
+RunService.RenderStepped:Connect(function()
+	if not autoFollow then return end
+	local char = LocalPlayer.Character
+	local hrp = char and char:FindFirstChild("HumanoidRootPart")
+	local hum = char and char:FindFirstChildOfClass("Humanoid")
+	if not hrp or not hum then return end
+	-- pause follow while stopped on red zone so Double Deck can trigger
+	if isStoppedOnActiveRedZone(hrp, hum) then return end
+	pcall(function()
+		if hrp.AssemblyLinearVelocity.Magnitude > 60 then
+			hrp.AssemblyLinearVelocity = Vector3.new(0, hrp.AssemblyLinearVelocity.Y, 0)
+		end
+	end)
+	local hasTool = char:FindFirstChildOfClass("Tool") ~= nil
+	if not hasTool or hum.MoveDirection.Magnitude > 0.1 then return end
+	local nearest, dist = nil, math.huge
+	for _, p in ipairs(Players:GetPlayers()) do
+		if p ~= LocalPlayer and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
+			local d = (hrp.Position - p.Character.HumanoidRootPart.Position).Magnitude
+			if d < dist then nearest = p.Character.HumanoidRootPart dist = d end
+		end
+	end
+	if nearest then
+		if tick() - lastJitter > 1.5 then
+			jitter = Vector3.new(math.random(-2, 2), 0, math.random(-2, 2))
+			lastJitter = tick()
+		end
+		hum:MoveTo(nearest.Position + jitter)
+	end
+end)
+
+
+-- Auto follow V1 (old public): no bomb required, only while standing still
+RunService.RenderStepped:Connect(function()
+	if not autoFollowV1 then return end
+	local char = LocalPlayer.Character
+	local hrp = char and char:FindFirstChild("HumanoidRootPart")
+	local hum = char and char:FindFirstChildOfClass("Humanoid")
+	if not hrp or not hum then return end
+	-- pause follow while stopped on red zone so Double Deck can trigger
+	if isStoppedOnActiveRedZone(hrp, hum) then return end
+	-- player is walking / using joystick — let them control
+	if hum.MoveDirection.Magnitude > 0.05 then
+		return
+	end
+	local nearest, dist = nil, math.huge
+	for _, p in ipairs(Players:GetPlayers()) do
+		if p ~= LocalPlayer and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
+			local d = (hrp.Position - p.Character.HumanoidRootPart.Position).Magnitude
+			if d < dist then
+				nearest = p.Character.HumanoidRootPart
+				dist = d
+			end
+		end
+	end
+	if nearest then
+		hum:MoveTo(nearest.Position)
+	end
+end)
+
+-- Auto flick
+RunService.RenderStepped:Connect(function()
+	if not autoFlick or flickBusy then return end
+	local char = LocalPlayer.Character
+	local hrp = char and char:FindFirstChild("HumanoidRootPart")
+	if not hrp or not char:FindFirstChildOfClass("Tool") then return end
+	local near = false
+	for _, p in ipairs(Players:GetPlayers()) do
+		if p ~= LocalPlayer and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
+			if (hrp.Position - p.Character.HumanoidRootPart.Position).Magnitude <= 5 then
+				near = true
+				break
+			end
+		end
+	end
+	if not near then return end
+	flickBusy = true
+	task.spawn(function()
+		if autoFlickMode == "Mode 1" then
+			hrp.CFrame = hrp.CFrame * CFrame.Angles(0, math.rad(180), 0)
+			task.wait(0.05)
+			if hrp and hrp.Parent then
+				hrp.CFrame = hrp.CFrame * CFrame.Angles(0, math.rad(-180), 0)
+			end
+			task.wait(0.04)
+		else
+			local cf = Camera.CFrame
+			Camera.CFrame = cf * CFrame.Angles(0, math.rad(90), 0)
+			task.wait(0.05)
+			Camera.CFrame = cf
+			task.wait(0.03)
+		end
+		flickBusy = false
+	end)
+end)
+
+-- Wallhop (fixed V1 — longer rays, multi-height, force jump)
+local function nearWall(hrp)
+	if not hrp then return false end
+	local char = LocalPlayer.Character
+	local params = RaycastParams.new()
+	params.FilterType = Enum.RaycastFilterType.Exclude
+	params.FilterDescendantsInstances = { char }
+	params.IgnoreWater = true
+	local dirs = {
+		hrp.CFrame.LookVector, -hrp.CFrame.LookVector,
+		hrp.CFrame.RightVector, -hrp.CFrame.RightVector,
+	}
+	local origins = {
+		hrp.Position,
+		hrp.Position + Vector3.new(0, 1.5, 0),
+		hrp.Position + Vector3.new(0, -1.2, 0),
+	}
+	for _, origin in ipairs(origins) do
+		for _, dir in ipairs(dirs) do
+			local hit = Workspace:Raycast(origin, dir * 3.5, params)
+			if hit and hit.Instance and hit.Instance.CanCollide then
+				return true
+			end
+		end
+	end
+	return false
+end
+
+RunService.Heartbeat:Connect(function()
+	if not ScriptAlive then return end
+	local char = LocalPlayer.Character
+	local hrp = char and char:FindFirstChild("HumanoidRootPart")
+	touchingWall = hrp and nearWall(hrp) or false
+end)
+
+local function doWallhopV1()
+	local char = LocalPlayer.Character
+	local hrp = char and char:FindFirstChild("HumanoidRootPart")
+	local hum = char and char:FindFirstChildOfClass("Humanoid")
+	if not hrp or not hum then return end
+	task.spawn(function()
+		local look = hrp.CFrame
+		hrp.CFrame = look * CFrame.Angles(0, math.rad(-90), 0)
+		hum:ChangeState(Enum.HumanoidStateType.Jumping)
+		hrp.AssemblyLinearVelocity = Vector3.new(
+			hrp.AssemblyLinearVelocity.X,
+			math.max(hrp.AssemblyLinearVelocity.Y, 40),
+			hrp.AssemblyLinearVelocity.Z
+		)
+		task.wait(0.04)
+		if hrp and hrp.Parent then
+			hrp.CFrame = hrp.CFrame * CFrame.Angles(0, math.rad(90), 0)
+		end
+	end)
+end
+
+UserInputService.JumpRequest:Connect(function()
+	if not ScriptAlive then return end
+
+	-- Wallhop V1 (old): jump while touching wall
+	if wallhopV1 and not wallhopCd then
+		local char = LocalPlayer.Character
+		local hrp = char and char:FindFirstChild("HumanoidRootPart")
+		local onWall = touchingWall or (hrp and nearWall(hrp))
+		if onWall then
+			wallhopCd = true
+			doWallhopV1()
+			task.delay(0.14, function() wallhopCd = false end)
+		end
+	end
+
+	-- Wallhop V2 (smooth rotate)
+	if wallhopV2 and not wallhopCd then
+		local char = LocalPlayer.Character
+		local hrp = char and char:FindFirstChild("HumanoidRootPart")
+		local hum = char and char:FindFirstChildOfClass("Humanoid")
+		if hrp and hum and nearWall(hrp) then
+			wallhopCd = true
+			task.spawn(function()
+				local step = math.rad(90) / 6
+				for _ = 1, 6 do
+					if not hrp.Parent then break end
+					hrp.CFrame = hrp.CFrame * CFrame.Angles(0, step, 0)
+					RunService.RenderStepped:Wait()
+				end
+				hum:ChangeState(Enum.HumanoidStateType.Jumping)
+				task.wait(0.02)
+				for _ = 1, 6 do
+					if not hrp.Parent then break end
+					hrp.CFrame = hrp.CFrame * CFrame.Angles(0, -step, 0)
+					RunService.RenderStepped:Wait()
+				end
+				wallhopCd = false
+			end)
+		end
+	end
+
+	-- Infinite jump
+	if infJump then
+		local now = os.clock()
+		if infJumpMode == "Original" and now - lastInfJump < 0.2 then return end
+		lastInfJump = now
+		local char = LocalPlayer.Character
+		local hum = char and char:FindFirstChildOfClass("Humanoid")
+		local hrp = char and char:FindFirstChild("HumanoidRootPart")
+		if hum and hrp then
+			hrp.AssemblyLinearVelocity = Vector3.new(
+				hrp.AssemblyLinearVelocity.X,
+				math.clamp(hum.JumpPower > 0 and hum.JumpPower or 50, 30, 55),
+				hrp.AssemblyLinearVelocity.Z
+			)
+			hum:ChangeState(Enum.HumanoidStateType.Jumping)
+		end
+	end
+end)
+
+RunService.RenderStepped:Connect(function()
+	if not tpWalk then return end
+	local char = LocalPlayer.Character
+	local hum = char and char:FindFirstChildOfClass("Humanoid")
+	local hrp = char and char:FindFirstChild("HumanoidRootPart")
+	if not hum or not hrp or hum.FloorMaterial == Enum.Material.Air then return end
+	local md = hum.MoveDirection
+	if md.Magnitude > 0 then
+		local sp = hum.WalkSpeed * math.clamp(tpWalkMult, 0.1, 5)
+		local v = hrp.AssemblyLinearVelocity
+		hrp.AssemblyLinearVelocity = v:Lerp(Vector3.new(md.X * sp, v.Y, md.Z * sp), 0.5)
+	end
+end)
+
+
+-- Player ESP (avatar headshot above head + highlight)
+local ESP_FOLDER_NAME = "KHUB_TimebombESP"
+
+local function getEspFolder()
+	local parent
+	pcall(function()
+		if gethui then parent = gethui() end
+	end)
+	if not parent then
+		pcall(function() parent = CoreGui end)
+	end
+	if not parent then
+		parent = LocalPlayer:FindFirstChild("PlayerGui") or LocalPlayer:WaitForChild("PlayerGui")
+	end
+	local folder = parent:FindFirstChild(ESP_FOLDER_NAME)
+	if not folder then
+		folder = Instance.new("Folder")
+		folder.Name = ESP_FOLDER_NAME
+		folder.Parent = parent
+	end
+	return folder
+end
+
+local function clearPlayerESP(plr)
+	local data = espObjects[plr]
+	if data then
+		pcall(function() if data.bb then data.bb:Destroy() end end)
+		pcall(function() if data.hl then data.hl:Destroy() end end)
+		espObjects[plr] = nil
+	end
+end
+
+local function clearAllPlayerESP()
+	for plr in pairs(espObjects) do
+		clearPlayerESP(plr)
+	end
+	espObjects = {}
+	pcall(function()
+		local f = getEspFolder()
+		if f then f:ClearAllChildren() end
+	end)
+end
+
+local function applyPlayerESP(plr)
+	if not playerESP or plr == LocalPlayer then return end
+	local char = plr.Character
+	if not char then return end
+	local head = char:FindFirstChild("Head") or char:FindFirstChild("HumanoidRootPart")
+	if not head then return end
+
+	clearPlayerESP(plr)
+
+	local folder = getEspFolder()
+	local bb = Instance.new("BillboardGui")
+	bb.Name = "ESP_" .. plr.Name
+	bb.Adornee = head
+	bb.Size = UDim2.new(0, 56, 0, 70)
+	bb.StudsOffset = Vector3.new(0, 3.2, 0)
+	bb.AlwaysOnTop = true
+	bb.MaxDistance = 500
+	bb.Parent = folder
+
+	local img = Instance.new("ImageLabel")
+	img.Size = UDim2.new(0, 48, 0, 48)
+	img.Position = UDim2.new(0.5, -24, 0, 0)
+	img.BackgroundColor3 = Color3.fromRGB(20, 16, 28)
+	img.BackgroundTransparency = 0.25
+	img.BorderSizePixel = 0
+	img.Image = string.format("rbxthumb://type=AvatarHeadShot&id=%d&w=150&h=150", plr.UserId)
+	img.Parent = bb
+	local ic = Instance.new("UICorner")
+	ic.CornerRadius = UDim.new(0, 8)
+	ic.Parent = img
+	local ist = Instance.new("UIStroke")
+	ist.Color = Color3.fromRGB(160, 100, 255)
+	ist.Thickness = 1.4
+	ist.Transparency = 0.2
+	ist.Parent = img
+
+	local nameLbl = Instance.new("TextLabel")
+	nameLbl.Size = UDim2.new(1, 0, 0, 16)
+	nameLbl.Position = UDim2.new(0, 0, 1, -16)
+	nameLbl.BackgroundTransparency = 1
+	nameLbl.Text = plr.DisplayName or plr.Name
+	nameLbl.TextColor3 = Color3.fromRGB(240, 230, 255)
+	nameLbl.TextStrokeTransparency = 0.4
+	nameLbl.Font = Enum.Font.GothamBold
+	nameLbl.TextSize = 11
+	nameLbl.TextTruncate = Enum.TextTruncate.AtEnd
+	nameLbl.Parent = bb
+
+	local hasBomb = char:FindFirstChildOfClass("Tool") ~= nil
+	local fillCol = hasBomb and Color3.fromRGB(255, 45, 45) or Color3.fromRGB(160, 90, 255)
+	local outCol = hasBomb and Color3.fromRGB(255, 200, 80) or Color3.fromRGB(255, 220, 255)
+
+	local hl = Instance.new("Highlight")
+	hl.Name = "KHUB_ESP_HL"
+	hl.Adornee = char
+	hl.FillColor = fillCol
+	hl.OutlineColor = outCol
+	hl.FillTransparency = hasBomb and 0.55 or 0.72
+	hl.OutlineTransparency = 0.12
+	hl.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+	hl.Parent = char
+
+	-- mark bomb holder on avatar stroke
+	if hasBomb then
+		local stroke = img:FindFirstChildOfClass("UIStroke")
+		if stroke then
+			stroke.Color = Color3.fromRGB(255, 60, 60)
+			stroke.Thickness = 2
+		end
+		if nameLbl then
+			nameLbl.TextColor3 = Color3.fromRGB(255, 120, 120)
+			nameLbl.Text = (plr.DisplayName or plr.Name) .. " [BOMB]"
+		end
+	end
+
+	espObjects[plr] = { bb = bb, hl = hl, hasBomb = hasBomb }
+end
+
+local function refreshAllPlayerESP()
+	if not playerESP then
+		clearAllPlayerESP()
+		return
+	end
+	for _, plr in ipairs(Players:GetPlayers()) do
+		if plr ~= LocalPlayer then
+			if plr.Character then
+				applyPlayerESP(plr)
+			end
+		end
+	end
+end
+
+Players.PlayerAdded:Connect(function(plr)
+	plr.CharacterAdded:Connect(function()
+		task.wait(0.4)
+		if playerESP then applyPlayerESP(plr) end
+	end)
+end)
+Players.PlayerRemoving:Connect(function(plr)
+	clearPlayerESP(plr)
+end)
+
+local lastEspBombCheck = 0
+RunService.Heartbeat:Connect(function()
+	if not ScriptAlive or not playerESP then return end
+	local now = os.clock()
+	if now - lastEspBombCheck < 0.9 then return end
+	lastEspBombCheck = now
+	for plr, data in pairs(espObjects) do
+		local char = plr and plr.Character
+		if char and data then
+			local hasBomb = char:FindFirstChildOfClass("Tool") ~= nil
+			if data.hasBomb ~= hasBomb then
+				data.hasBomb = hasBomb
+				if data.hl and data.hl.Parent then
+					if hasBomb then
+						data.hl.FillColor = Color3.fromRGB(255, 45, 45)
+						data.hl.OutlineColor = Color3.fromRGB(255, 200, 80)
+						data.hl.FillTransparency = 0.55
+					else
+						data.hl.FillColor = Color3.fromRGB(160, 90, 255)
+						data.hl.OutlineColor = Color3.fromRGB(255, 220, 255)
+						data.hl.FillTransparency = 0.72
+					end
+				end
+				if data.bb then
+					local lbl = data.bb:FindFirstChildOfClass("TextLabel")
+					if lbl then
+						if hasBomb then
+							lbl.Text = (plr.DisplayName or plr.Name) .. " [BOMB]"
+							lbl.TextColor3 = Color3.fromRGB(255, 120, 120)
+						else
+							lbl.Text = plr.DisplayName or plr.Name
+							lbl.TextColor3 = Color3.fromRGB(240, 230, 255)
+						end
+					end
+				end
+			end
+		end
+	end
+end)
+for _, plr in ipairs(Players:GetPlayers()) do
+	if plr ~= LocalPlayer then
+		plr.CharacterAdded:Connect(function()
+			task.wait(0.4)
+			if playerESP then applyPlayerESP(plr) end
+		end)
+	end
+end
+
+
+-- Bomb ESP (tools / models with bomb in the name)
+local BOMB_ESP_FOLDER = "KHUB_BombESP"
+
+local function getBombEspFolder()
+	local parent
+	pcall(function()
+		if gethui then parent = gethui() end
+	end)
+	if not parent then
+		pcall(function() parent = CoreGui end)
+	end
+	if not parent then
+		parent = LocalPlayer:FindFirstChild("PlayerGui") or LocalPlayer:WaitForChild("PlayerGui")
+	end
+	local folder = parent:FindFirstChild(BOMB_ESP_FOLDER)
+	if not folder then
+		folder = Instance.new("Folder")
+		folder.Name = BOMB_ESP_FOLDER
+		folder.Parent = parent
+	end
+	return folder
+end
+
+local function isBombLike(obj)
+	if not obj or not obj.Parent then return false end
+	local classOk = obj:IsA("Tool") or obj:IsA("Model") or obj:IsA("BasePart")
+	if not classOk then return false end
+	-- skip character body parts
+	if obj:IsA("BasePart") then
+		local n0 = obj.Name
+		if n0 == "Head" or n0 == "Torso" or n0 == "HumanoidRootPart" or n0:find("Arm") or n0:find("Leg") or n0:find("Hand") or n0:find("Foot") then
+			return false
+		end
+	end
+	local n = string.lower(tostring(obj.Name))
+	if n:find("bomb", 1, true) or n:find("tnt", 1, true)
+		or n:find("dynamite", 1, true) or n:find("explosive", 1, true)
+		or n:find("timebomb", 1, true) or n:find("grenade", 1, true)
+		or n:find("c4", 1, true) then
+		return true
+	end
+	-- any Tool in this game is typically the bomb
+	if obj:IsA("Tool") then
+		return true
+	end
+	return false
+end
+
+local function getBombAdornee(obj)
+	if not obj then return nil end
+	if obj:IsA("BasePart") then return obj end
+	if obj:IsA("Tool") or obj:IsA("Model") then
+		local handle = obj:FindFirstChild("Handle")
+		if handle and handle:IsA("BasePart") then return handle end
+		if obj:IsA("Model") and obj.PrimaryPart then return obj.PrimaryPart end
+		return obj:FindFirstChildWhichIsA("BasePart", true)
+	end
+	return nil
+end
+
+local function clearBombESP(obj)
+	local data = bombEspObjects[obj]
+	if data then
+		pcall(function() if data.bb then data.bb:Destroy() end end)
+		pcall(function() if data.hl then data.hl:Destroy() end end)
+		bombEspObjects[obj] = nil
+	end
+end
+
+local function clearAllBombESP()
+	for obj in pairs(bombEspObjects) do
+		clearBombESP(obj)
+	end
+	bombEspObjects = {}
+	pcall(function()
+		local f = getBombEspFolder()
+		if f then f:ClearAllChildren() end
+	end)
+end
+
+local function applyBombESP(obj)
+	if not bombESP or not obj or not obj.Parent then return end
+	if not isBombLike(obj) then return end
+	local adornee = getBombAdornee(obj)
+	if not adornee then return end
+
+	-- already tracking and still valid
+	local existing = bombEspObjects[obj]
+	if existing and existing.bb and existing.bb.Parent and existing.bb.Adornee == adornee then
+		return
+	end
+	clearBombESP(obj)
+
+	local folder = getBombEspFolder()
+	local bb = Instance.new("BillboardGui")
+	bb.Name = "BombESP"
+	bb.Adornee = adornee
+	bb.Size = UDim2.new(0, 70, 0, 28)
+	bb.StudsOffset = Vector3.new(0, 2.4, 0)
+	bb.AlwaysOnTop = true
+	bb.MaxDistance = 600
+	bb.Parent = folder
+
+	local lbl = Instance.new("TextLabel")
+	lbl.Size = UDim2.new(1, 0, 1, 0)
+	lbl.BackgroundColor3 = Color3.fromRGB(40, 12, 12)
+	lbl.BackgroundTransparency = 0.25
+	lbl.BorderSizePixel = 0
+	lbl.Text = "BOMB"
+	lbl.TextColor3 = Color3.fromRGB(255, 90, 90)
+	lbl.TextStrokeTransparency = 0.3
+	lbl.Font = Enum.Font.GothamBold
+	lbl.TextSize = 13
+	lbl.Parent = bb
+	local lc = Instance.new("UICorner")
+	lc.CornerRadius = UDim.new(0, 6)
+	lc.Parent = lbl
+	local ls = Instance.new("UIStroke")
+	ls.Color = Color3.fromRGB(255, 60, 60)
+	ls.Thickness = 1.2
+	ls.Parent = lbl
+
+	local hl = Instance.new("Highlight")
+	hl.Name = "KHUB_BombHL"
+	hl.Adornee = obj:IsA("Model") and obj or (obj:IsA("Tool") and obj or adornee)
+	if not hl.Adornee then hl.Adornee = adornee end
+	hl.FillColor = Color3.fromRGB(255, 50, 50)
+	hl.OutlineColor = Color3.fromRGB(255, 200, 80)
+	hl.FillTransparency = 0.55
+	hl.OutlineTransparency = 0.1
+	hl.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+	pcall(function()
+		hl.Parent = obj:IsA("Model") and obj or adornee
+	end)
+
+	bombEspObjects[obj] = { bb = bb, hl = hl }
+end
+
+local function scanBombs()
+	if not bombESP then return end
+	local seen = {}
+
+	-- equipped / backpack tools
+	for _, plr in ipairs(Players:GetPlayers()) do
+		local function scanContainer(container)
+			if not container then return end
+			for _, child in ipairs(container:GetChildren()) do
+				if isBombLike(child) then
+					seen[child] = true
+					applyBombESP(child)
+				end
+			end
+		end
+		if plr.Character then scanContainer(plr.Character) end
+		pcall(function() scanContainer(plr:FindFirstChild("Backpack")) end)
+	end
+
+	-- workspace dropped bombs (deep-ish scan)
+	local function scanDesc(root, depth)
+		if depth > 4 or not root then return end
+		for _, obj in ipairs(root:GetChildren()) do
+			if isBombLike(obj) then
+				seen[obj] = true
+				applyBombESP(obj)
+			end
+			if obj:IsA("Folder") or obj:IsA("Model") then
+				scanDesc(obj, depth + 1)
+			end
+		end
+	end
+	scanDesc(Workspace, 0)
+
+	-- cleanup gone objects
+	for obj in pairs(bombEspObjects) do
+		if not seen[obj] or not obj.Parent then
+			clearBombESP(obj)
+		end
+	end
+end
+
+local lastBombScan = 0
+RunService.Heartbeat:Connect(function()
+	if not ScriptAlive or not bombESP then return end
+	local now = os.clock()
+	if now - lastBombScan < 1.0 then return end
+	lastBombScan = now
+	pcall(scanBombs)
+end)
+
+local function setFPSBoostV1(on)
+	fpsV1 = on
+	if on then
+		savedLighting.Quality = settings().Rendering.QualityLevel
+		pcall(function() settings().Rendering.QualityLevel = Enum.QualityLevel.Level01 end)
+		Lighting.GlobalShadows = false
+		Lighting.FogEnd = 9e9
+	else
+		pcall(function()
+			if savedLighting.Quality then settings().Rendering.QualityLevel = savedLighting.Quality end
+		end)
+		Lighting.GlobalShadows = true
+	end
+end
+
+local function setFPSBoostV2(on)
+	fpsV2 = on
+	if on then
+		setFPSBoostV1(true)
+		pcall(function()
+			Lighting.Technology = Enum.Technology.Legacy
+			Workspace.Terrain.Decoration = false
+		end)
+		for _, v in ipairs(Workspace:GetDescendants()) do
+			if v:IsA("ParticleEmitter") or v:IsA("Trail") or v:IsA("Beam") then
+				v.Enabled = false
+			end
+		end
+	else
+		setFPSBoostV1(false)
+	end
+end
+
+--[[ FPS Boost V3 — dark / orange visual pack (no CFrame tools) ]]
+local function setFPSBoostV3(on)
+	fpsV3 = on == true
+	if fpsV3 then
+		savedLightingV3 = {
+			Ambient = Lighting.Ambient,
+			OutdoorAmbient = Lighting.OutdoorAmbient,
+			ColorShift_Top = Lighting.ColorShift_Top,
+			EnvironmentDiffuseScale = Lighting.EnvironmentDiffuseScale,
+			EnvironmentSpecularScale = Lighting.EnvironmentSpecularScale,
+			Brightness = Lighting.Brightness,
+			GlobalShadows = Lighting.GlobalShadows,
+			FogColor = Lighting.FogColor,
+			FogStart = Lighting.FogStart,
+			FogEnd = Lighting.FogEnd,
+		}
+		pcall(function()
+			Lighting.Ambient = Color3.fromRGB(80, 40, 20)
+			Lighting.OutdoorAmbient = Color3.fromRGB(100, 50, 20)
+			Lighting.ColorShift_Top = Color3.fromRGB(255, 100, 0)
+			Lighting.EnvironmentDiffuseScale = 0
+			Lighting.EnvironmentSpecularScale = 0
+			Lighting.Brightness = 0.5
+			Lighting.GlobalShadows = false
+			Lighting.FogColor = Color3.fromRGB(50, 20, 10)
+			Lighting.FogStart = 50
+			Lighting.FogEnd = 300
+		end)
+		for _, v in ipairs(Workspace:GetDescendants()) do
+			if v:IsA("ParticleEmitter") or v:IsA("Smoke") or v:IsA("Fire") or v:IsA("Sparkles") then
+				pcall(function() v.Enabled = false end)
+			elseif v:IsA("Decal") or v:IsA("Texture") then
+				pcall(function() v.Transparency = 1 end)
+			elseif v:IsA("PointLight") or v:IsA("SpotLight") or v:IsA("SurfaceLight") then
+				pcall(function() v.Enabled = false end)
+			end
+		end
+	else
+		pcall(function()
+			if savedLightingV3.Ambient then Lighting.Ambient = savedLightingV3.Ambient end
+			if savedLightingV3.OutdoorAmbient then Lighting.OutdoorAmbient = savedLightingV3.OutdoorAmbient end
+			if savedLightingV3.ColorShift_Top then Lighting.ColorShift_Top = savedLightingV3.ColorShift_Top end
+			if savedLightingV3.EnvironmentDiffuseScale then Lighting.EnvironmentDiffuseScale = savedLightingV3.EnvironmentDiffuseScale end
+			if savedLightingV3.EnvironmentSpecularScale then Lighting.EnvironmentSpecularScale = savedLightingV3.EnvironmentSpecularScale end
+			if savedLightingV3.Brightness then Lighting.Brightness = savedLightingV3.Brightness end
+			if savedLightingV3.GlobalShadows ~= nil then Lighting.GlobalShadows = savedLightingV3.GlobalShadows end
+			if savedLightingV3.FogColor then Lighting.FogColor = savedLightingV3.FogColor end
+			if savedLightingV3.FogStart then Lighting.FogStart = savedLightingV3.FogStart end
+			if savedLightingV3.FogEnd then Lighting.FogEnd = savedLightingV3.FogEnd end
+		end)
+		for _, v in ipairs(Workspace:GetDescendants()) do
+			if v:IsA("ParticleEmitter") or v:IsA("Smoke") or v:IsA("Fire") or v:IsA("Sparkles") then
+				pcall(function() v.Enabled = true end)
+			elseif v:IsA("Decal") or v:IsA("Texture") then
+				pcall(function() v.Transparency = 0 end)
+			elseif v:IsA("PointLight") or v:IsA("SpotLight") or v:IsA("SurfaceLight") then
+				pcall(function() v.Enabled = true end)
+			end
+		end
+	end
+end
+
+--[[ Double Deck zones — Fake Flick (clean) ]]
+local zone1_start = CFrame.new(99.0044861, 3.99999928, -57.7142601, 0.993703246, -5.25085575e-09, 0.112043805, 5.6372258e-09, 1, -3.13157589e-09, -0.112043805, 3.74347353e-09, 0.993703246)
+local zone1_target = CFrame.new(115.676491, 15.4999971, -48.6129799, -0.503733754, -3.60067283e-08, -0.863858938, -8.66119798e-09, 1, -3.6630734e-08, 0.863858938, -1.09700853e-08, -0.503733754)
+local zone2_start = CFrame.new(134.93866, 3.99999928, -57.6599274, 0.998402953, -5.74126702e-08, 0.0564939901, 5.47378107e-08, 1, 4.8895064e-08, -0.0564939901, -4.57246188e-08, 0.998402953)
+local zone2_target = CFrame.new(115.676491, 15.4999971, -48.6129799, -0.503733754, -3.60067283e-08, -0.863858938, -8.66119798e-09, 1, -3.6630734e-08, 0.863858938, -1.09700853e-08, -0.503733754)
+
+local zone1Enabled = false
+local zone2Enabled = false
+local deckCooldown = false
+
+local WARMUP_JUMPS = 3
+local WARMUP_DELAY = 0.08
+local SLIDE_TIME = 0.25
+local COOLDOWN_TIME = 0.5
+
+local function createZonePart(name, cf)
+	local p = Instance.new("Part")
+	p.Name = name
+	p.Size = Vector3.new(3.6, 2.2, 3.6)
+	p.CFrame = cf
+	p.Anchored = true
+	p.CanCollide = false
+	p.Material = Enum.Material.Neon
+	p.Color = Color3.fromRGB(255, 0, 0)
+	p.Transparency = 1
+	p.Parent = Workspace
+	local box = Instance.new("SelectionBox")
+	box.Adornee = p
+	box.Color3 = Color3.fromRGB(255, 50, 50)
+	box.LineThickness = 0.02
+	box.Visible = false
+	box.Parent = p
+	return p
+end
+
+local redZone1 = createZonePart("KHUB_DoubleDeckZone1", zone1_start)
+local redZone2 = createZonePart("KHUB_DoubleDeckZone2", zone2_start)
+
+local function setZoneVisual(part, on)
+	part.Transparency = on and 0.5 or 1
+	local box = part:FindFirstChildOfClass("SelectionBox")
+	if box then box.Visible = on end
+end
+
+local function setZone1(on)
+	zone1Enabled = on == true
+	RedDeck.zone1 = zone1Enabled
+	setZoneVisual(redZone1, zone1Enabled)
+end
+
+local function setZone2(on)
+	zone2Enabled = on == true
+	RedDeck.zone2 = zone2Enabled
+	setZoneVisual(redZone2, zone2Enabled)
+end
+
+local function triggerDoubleDeck(character, startCF, targetCF)
+	local root = character:FindFirstChild("HumanoidRootPart")
+	local humanoid = character:FindFirstChildOfClass("Humanoid")
+	if not root or not humanoid then return end
+
+	deckCooldown = true
+
+	for _ = 1, WARMUP_JUMPS do
+		if not humanoid.Parent then
+			deckCooldown = false
+			return
+		end
+		humanoid.Jump = true
+		root.AssemblyLinearVelocity = Vector3.new(root.AssemblyLinearVelocity.X, 60, root.AssemblyLinearVelocity.Z)
+		task.wait(WARMUP_DELAY)
+	end
+
+	root.AssemblyLinearVelocity = Vector3.new(0, 70, 0)
+	task.wait(0.15)
+
+	local startPos = root.Position
+	local targetPos = targetCF.Position
+	local targetRotation = targetCF - targetCF.Position
+	local steps = 15
+	for i = 1, steps do
+		if not root.Parent then break end
+		local alpha = i / steps
+		local currentPos = startPos:Lerp(targetPos, alpha)
+		root.CFrame = CFrame.new(currentPos) * targetRotation
+		root.AssemblyAngularVelocity = Vector3.zero
+		root.AssemblyLinearVelocity = Vector3.zero
+		task.wait(SLIDE_TIME / steps)
+	end
+
+	if root.Parent and humanoid.Parent then
+		root.CFrame = targetCF
+		root.AssemblyLinearVelocity = Vector3.zero
+		root.AssemblyAngularVelocity = Vector3.zero
+		humanoid:ChangeState(Enum.HumanoidStateType.Landed)
+	end
+
+	task.wait(COOLDOWN_TIME)
+	deckCooldown = false
+end
+
+RunService.Heartbeat:Connect(function()
+	if deckCooldown or not ScriptAlive then return end
+	local char = LocalPlayer.Character
+	if not char then return end
+	local root = char:FindFirstChild("HumanoidRootPart")
+	local humanoid = char:FindFirstChildOfClass("Humanoid")
+	if not (root and humanoid) then return end
+
+	local isStopped = humanoid.MoveDirection.Magnitude < 0.05 and root.AssemblyLinearVelocity.Magnitude < 1.5
+	if not isStopped then return end
+
+	if zone1Enabled and (root.Position - zone1_start.Position).Magnitude <= 3.0 then
+		triggerDoubleDeck(char, zone1_start, zone1_target)
+	elseif zone2Enabled and (root.Position - zone2_start.Position).Magnitude <= 3.0 then
+		triggerDoubleDeck(char, zone2_start, zone2_target)
+	end
+end)
+
+local Icons = {
+	home = "rbxassetid://6031097226",
+	welcome = "rbxassetid://6031097226",
+	settings = "rbxassetid://6031280882",
+	save = "rbxassetid://6031260796",
+	config = "rbxassetid://6031260796",
+	user = "rbxassetid://6034287594",
+	info = "rbxassetid://6031071053",
+	server = "rbxassetid://6034949389",
+	main = "rbxassetid://6034509993",
+	player = "rbxassetid://6034287594",
+	sword = "rbxassetid://6035056476",
+	combat = "rbxassetid://6035056476",
+	target = "rbxassetid://6034684930",
+}
+
+local function resolveIcon(name)
+	if not name then return Icons.home end
+	local key = string.lower(tostring(name))
+	return Icons[key] or Icons.home or "rbxassetid://6031097226"
+end
+
+
+local function setAntiAfk() end
+local function setAutoReconnect() end
+
+local THEME = {
+	bg      = Color3.fromRGB(4, 3, 8),
+	title   = Color3.fromRGB(10, 8, 16),
+	sidebar = Color3.fromRGB(6, 5, 12),
+	card    = Color3.fromRGB(18, 16, 32),
+	element = Color3.fromRGB(24, 20, 42),
+	accent  = Color3.fromRGB(80, 230, 255),
+	accent2 = Color3.fromRGB(185, 110, 255),
+	neonPink= Color3.fromRGB(255, 65, 180),
+	green   = Color3.fromRGB(65, 255, 145),
+	gold    = Color3.fromRGB(255, 220, 130),
+	text    = Color3.fromRGB(245, 247, 255),
+	dim     = Color3.fromRGB(150, 160, 195),
+	tabOn   = Color3.fromRGB(34, 28, 64),
+	tabOff  = Color3.fromRGB(14, 12, 28),
+	red     = Color3.fromRGB(255, 85, 115),
+	blue    = Color3.fromRGB(90, 170, 255),
+	purple  = Color3.fromRGB(160, 100, 255),
+}
+
+local function corner(o, r)
+	local c = Instance.new("UICorner")
+	c.CornerRadius = UDim.new(0, r or 8)
+	c.Parent = o
+	return c
+end
+
+local function stroke(o, col, th, tr)
+	local s = Instance.new("UIStroke")
+	s.Color = col or THEME.accent
+	s.Thickness = th or 1
+	s.Transparency = tr or 0.2
+	s.Parent = o
+	return s
+end
+
+local function createRipple(btn)
+	btn.ClipsDescendants = true
+	local circle = Instance.new("Frame")
+	circle.AnchorPoint = Vector2.new(0.5, 0.5)
+	circle.Position = UDim2.new(0.5, 0, 0.5, 0)
+	circle.Size = UDim2.new(0, 0, 0, 0)
+	circle.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+	circle.BackgroundTransparency = 0.65
+	circle.BorderSizePixel = 0
+	circle.ZIndex = (btn.ZIndex or 10) + 1
+	circle.Parent = btn
+	corner(circle, 999)
+	local maxDim = math.max(btn.AbsoluteSize.X, btn.AbsoluteSize.Y) * 2.2
+	if maxDim < 50 then maxDim = 120 end
+	TweenService:Create(circle, TweenInfo.new(0.45, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+		Size = UDim2.new(0, maxDim, 0, maxDim),
+		BackgroundTransparency = 1,
+	}):Play()
+	task.delay(0.45, function() circle:Destroy() end)
+end
+
+-- ============================================================
+-- DIAMOND RAIN / WIND PARTICLE EFFECT
+-- ============================================================
+local function attachDiamondRain(host, isOrb)
+	-- Floating diamonds that drift around like wind / falling leaves
+	local diamondContainer = Instance.new("Frame")
+	diamondContainer.Name = "DiamondRain"
+	diamondContainer.Size = UDim2.new(2, 0, 2, 0)
+	diamondContainer.Position = UDim2.new(-0.5, 0, -0.5, 0)
+	diamondContainer.BackgroundTransparency = 1
+	diamondContainer.ZIndex = (host.ZIndex or 10) + 3
+	diamondContainer.Parent = host
+
+	task.spawn(function()
+		local diamonds = {}
+		local MAX_DIAMONDS = isOrb and 20 or 12
+
+		local function createDiamond()
+			if #diamonds >= MAX_DIAMONDS then
+				local old = table.remove(diamonds, 1)
+				pcall(function() old:Destroy() end)
+			end
+			local d = Instance.new("Frame")
+			local size = math.random(3, 7)
+			d.Size = UDim2.new(0, size, 0, size)
+			d.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+			d.BorderSizePixel = 0
+			d.ZIndex = diamondContainer.ZIndex
+
+			-- Diamond shape via rotation + gradient
+			d.Rotation = 45
+			local grad = Instance.new("UIGradient")
+			grad.Color = ColorSequence.new({
+				ColorSequenceKeypoint.new(0.0, THEME.accent),
+				ColorSequenceKeypoint.new(0.5, THEME.neonPink),
+				ColorSequenceKeypoint.new(1.0, THEME.accent2),
+			})
+			grad.Parent = d
+
+			local c = Instance.new("UICorner")
+			c.CornerRadius = UDim.new(0, math.random(1, 3))
+			c.Parent = d
+
+			-- Random start position around host
+			local angle = math.random() * math.pi * 2
+			local radius = math.random(20, isOrb and 80 or 60)
+			local cx, cy = 0.5, 0.5
+			local x = cx + math.cos(angle) * (radius / 200)
+			local y = cy + math.sin(angle) * (radius / 200)
+			d.AnchorPoint = Vector2.new(0.5, 0.5)
+			d.Position = UDim2.new(x, 0, y, 0)
+
+			-- Random transparency
+			d.BackgroundTransparency = math.random(20, 60) / 100
+
+			d.Parent = diamondContainer
+			table.insert(diamonds, d)
+
+			-- Float animation: drift outward + fade
+			local driftAngle = angle + (math.random() - 0.5) * 1.5
+			local driftRadius = radius + math.random(40, 80)
+			local targetX = cx + math.cos(driftAngle) * (driftRadius / 200)
+			local targetY = cy + math.sin(driftAngle) * (driftRadius / 200) - 0.1
+			local dur = 1.5 + math.random() * 2.0
+
+			TweenService:Create(d, TweenInfo.new(dur, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+				Position = UDim2.new(targetX, 0, targetY, 0),
+				BackgroundTransparency = 1,
+				Size = UDim2.new(0, size * 0.3, 0, size * 0.3),
+				Rotation = d.Rotation + math.random(-90, 90),
+			}):Play()
+
+			task.delay(dur, function()
+				pcall(function() d:Destroy() end)
+				for i, v in ipairs(diamonds) do
+					if v == d then table.remove(diamonds, i) break end
+				end
+			end)
+		end
+
+		-- Spawn loop
+		local t0 = os.clock()
+		while host.Parent do
+			local elapsed = os.clock() - t0
+			local spawnRate = isOrb and 0.15 or 0.25
+			if math.sin(elapsed * 3) > 0.8 then
+				createDiamond()
+				task.wait(spawnRate)
+			end
+			task.wait(0.05)
+		end
+	end)
+end
+
+-- ============================================================
+-- ULTIMATE LOGO AURA + SHOCKWAVE + DIAMONDS
+-- ============================================================
+local function attachMegaLogoAura(host, imageObj, isCircle)
+	host.ClipsDescendants = false
+
+	-- Shockwave pulse ring
+	local wave = Instance.new("Frame")
+	wave.AnchorPoint = Vector2.new(0.5, 0.5)
+	wave.Position = UDim2.new(0.5, 0, 0.5, 0)
+	wave.Size = UDim2.new(1, 0, 1, 0)
+	wave.BackgroundTransparency = 1
+	wave.ZIndex = math.max(1, (host.ZIndex or 10) - 2)
+	wave.Parent = host
+	corner(wave, isCircle and 999 or 12)
+
+	local waveStroke = Instance.new("UIStroke")
+	waveStroke.Thickness = 2
+	waveStroke.Color = THEME.accent
+	waveStroke.Transparency = 1
+	waveStroke.Parent = wave
+
+	-- Rotating Neon Glow Rim
+	local ring = Instance.new("Frame")
+	ring.AnchorPoint = Vector2.new(0.5, 0.5)
+	ring.Position = UDim2.new(0.5, 0, 0.5, 0)
+	ring.Size = UDim2.new(1, 8, 1, 8)
+	ring.BackgroundTransparency = 1
+	ring.ZIndex = math.max(1, (host.ZIndex or 10) - 1)
+	ring.Parent = host
+	corner(ring, isCircle and 999 or 12)
+
+	local ringStroke = Instance.new("UIStroke")
+	ringStroke.Thickness = 2
+	ringStroke.Transparency = 0.2
+	ringStroke.Color = Color3.fromRGB(255, 255, 255)
+	ringStroke.Parent = ring
+
+	local ringGrad = Instance.new("UIGradient")
+	ringGrad.Color = ColorSequence.new({
+		ColorSequenceKeypoint.new(0.0, THEME.neonPink),
+		ColorSequenceKeypoint.new(0.35, THEME.accent),
+		ColorSequenceKeypoint.new(0.7, THEME.accent2),
+		ColorSequenceKeypoint.new(1.0, THEME.neonPink),
+	})
+	ringGrad.Parent = ringStroke
+
+	-- Inner Shimmer Core
+	local coreShimmer = Instance.new("Frame")
+	coreShimmer.AnchorPoint = Vector2.new(0.5, 0.5)
+	coreShimmer.Position = UDim2.new(0.5, 0, 0.5, 0)
+	coreShimmer.Size = UDim2.new(1, 0, 1, 0)
+	coreShimmer.BackgroundTransparency = 0.85
+	coreShimmer.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+	coreShimmer.BorderSizePixel = 0
+	coreShimmer.ZIndex = (host.ZIndex or 10) + 1
+	coreShimmer.Parent = host
+	corner(coreShimmer, isCircle and 999 or 8)
+
+	local coreGrad = Instance.new("UIGradient")
+	coreGrad.Rotation = 45
+	coreGrad.Color = ColorSequence.new({
+		ColorSequenceKeypoint.new(0.0, Color3.fromRGB(255, 255, 255)),
+		ColorSequenceKeypoint.new(0.5, THEME.accent),
+		ColorSequenceKeypoint.new(1.0, THEME.neonPink),
+	})
+	coreGrad.Parent = coreShimmer
+
+	-- Sparkle burst particles
+	local sparkleContainer = Instance.new("Frame")
+	sparkleContainer.Size = UDim2.new(2, 0, 2, 0)
+	sparkleContainer.Position = UDim2.new(-0.5, 0, -0.5, 0)
+	sparkleContainer.BackgroundTransparency = 1
+	sparkleContainer.ZIndex = (host.ZIndex or 10) + 4
+	sparkleContainer.Parent = host
+
+	local function burstSparkles(count, color)
+		for i = 1, count or 8 do
+			local s = Instance.new("Frame")
+			local sz = math.random(2, 5)
+			s.Size = UDim2.new(0, sz, 0, sz)
+			s.AnchorPoint = Vector2.new(0.5, 0.5)
+			s.Position = UDim2.new(0.5, 0, 0.5, 0)
+			s.BackgroundColor3 = color or THEME.gold
+			s.BorderSizePixel = 0
+			s.Rotation = math.random(0, 360)
+			s.ZIndex = sparkleContainer.ZIndex
+			s.Parent = sparkleContainer
+			local c = Instance.new("UICorner")
+			c.CornerRadius = UDim.new(0, sz)
+			c.Parent = s
+
+			local a = math.random() * math.pi * 2
+			local r = math.random(20, 60)
+			TweenService:Create(s, TweenInfo.new(0.6 + math.random() * 0.4, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+				Position = UDim2.new(0.5 + math.cos(a) * r / 200, 0, 0.5 + math.sin(a) * r / 200, 0),
+				BackgroundTransparency = 1,
+				Size = UDim2.new(0, 0, 0, 0),
+			}):Play()
+			task.delay(1, function() pcall(function() s:Destroy() end) end)
+		end
+	end
+
+	-- Attach diamond rain
+	attachDiamondRain(host, isCircle)
+
+	-- Live Animation Thread
+	task.spawn(function()
+		local t0 = os.clock()
+		local nextWave = t0 + 1.2
+		local nextSparkle = t0 + 0.8
+
+		while host.Parent do
+			local elapsed = os.clock() - t0
+			local sine = (math.sin(elapsed * 4.2) + 1) * 0.5
+
+			ringGrad.Rotation = (elapsed * 90) % 360
+			coreGrad.Rotation = (elapsed * 120) % 360
+
+			ringStroke.Thickness = 1.6 + sine * 1.4
+			ringStroke.Transparency = 0.15 + sine * 0.4
+			coreShimmer.BackgroundTransparency = 0.78 + sine * 0.18
+
+			if os.clock() >= nextWave then
+				nextWave = os.clock() + 2.0
+				wave.Size = UDim2.new(1, 0, 1, 0)
+				waveStroke.Transparency = 0.2
+				waveStroke.Color = math.random() > 0.5 and THEME.accent or THEME.neonPink
+				TweenService:Create(wave, TweenInfo.new(1.1, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {
+					Size = UDim2.new(2.2, 0, 2.2, 0),
+				}):Play()
+				TweenService:Create(waveStroke, TweenInfo.new(1.1, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {
+					Transparency = 1,
+					Thickness = 0.5,
+				}):Play()
+				burstSparkles(6, THEME.accent)
+			end
+
+			if os.clock() >= nextSparkle then
+				nextSparkle = os.clock() + 1.5 + math.random() * 0.5
+				burstSparkles(3, Color3.fromRGB(255, 255, 255))
+			end
+
+			task.wait(0.03)
+		end
+	end)
+end
+
+local function getParent()
+	local ok, r = pcall(function() if gethui then return gethui() end end)
+	if ok and r then return r end
+	return CoreGui
+end
+
+pcall(function()
+	for _, n in ipairs({"KHUB_TimebombPremium", "KHUB_UI_Only", "HussValley", "StealFromTheRich_UI", "KHUB_UI_Modern", "KHUB_TimebombPremium"}) do
+		local g = CoreGui:FindFirstChild(n) or (player.PlayerGui and player.PlayerGui:FindFirstChild(n))
+		if g then g:Destroy() end
+	end
+end)
+
+-- VIEWPORT ADAPTIVE SIZING
+local camera = Workspace.CurrentCamera
+local vpSize = camera and camera.ViewportSize or Vector2.new(1280, 720)
+
+local WIN_W = math.clamp(vpSize.X * 0.75, 420, 560)
+local WIN_H = math.clamp(vpSize.Y * 0.75, 320, 420)
+local SIDE_W = isMobile and 100 or 124
+
+if isMobile and vpSize.X < 500 then
+	WIN_W = vpSize.X - 24
+	WIN_H = vpSize.Y - 40
+	SIDE_W = 95
+end
+
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "KHUB_TimebombPremium"
+ScreenGui.ResetOnSpawn = false
+ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+ScreenGui.DisplayOrder = 999
+ScreenGui.IgnoreGuiInset = true
+pcall(function() ScreenGui.ClipToDeviceSafeArea = false end)
+ScreenGui.Parent = getParent()
+
+-- TOAST NOTIFICATIONS
+local ToastHost = Instance.new("Frame")
+ToastHost.Size = UDim2.new(0, 270, 0, 420)
+ToastHost.Position = UDim2.new(1, -290, 0, 50)
+ToastHost.BackgroundTransparency = 1
+ToastHost.ZIndex = 200
+ToastHost.Parent = ScreenGui
+local toastLay = Instance.new("UIListLayout")
+toastLay.SortOrder = Enum.SortOrder.LayoutOrder
+toastLay.Padding = UDim.new(0, 8)
+toastLay.Parent = ToastHost
+
+local function notify(title, desc, ok)
+	local card = Instance.new("Frame")
+	card.Size = UDim2.new(1, 0, 0, 52)
+	card.BackgroundColor3 = Color3.fromRGB(15, 14, 26)
+	card.BackgroundTransparency = 0.1
+	card.BorderSizePixel = 0
+	card.ZIndex = 201
+	card.Parent = ToastHost
+	corner(card, 10)
+	stroke(card, ok and THEME.green or THEME.neonPink, 1.4, 0.25)
+	local icon = Instance.new("TextLabel")
+	icon.Size = UDim2.new(0, 28, 0, 28)
+	icon.Position = UDim2.new(0, 10, 0.5, -14)
+	icon.BackgroundTransparency = 1
+	icon.Text = ok and "✓" or "✦"
+	icon.TextColor3 = ok and THEME.green or THEME.accent
+	icon.Font = Enum.Font.GothamBold
+	icon.TextSize = 18
+	icon.ZIndex = 202
+	icon.Parent = card
+	local t = Instance.new("TextLabel")
+	t.Size = UDim2.new(1, -48, 0, 20)
+	t.Position = UDim2.new(0, 42, 0, 6)
+	t.BackgroundTransparency = 1
+	t.Text = tostring(title)
+	t.Font = Enum.Font.GothamBold
+	t.TextSize = 13
+	t.TextColor3 = THEME.text
+	t.TextXAlignment = Enum.TextXAlignment.Left
+	t.ZIndex = 202
+	t.Parent = card
+	local d = Instance.new("TextLabel")
+	d.Size = UDim2.new(1, -48, 0, 16)
+	d.Position = UDim2.new(0, 42, 0, 28)
+	d.BackgroundTransparency = 1
+	d.Text = tostring(desc or "")
+	d.Font = Enum.Font.Gotham
+	d.TextSize = 11
+	d.TextColor3 = THEME.dim
+	d.TextXAlignment = Enum.TextXAlignment.Left
+	d.ZIndex = 202
+	d.Parent = card
+	card.Position = UDim2.new(1, 30, 0, 0)
+	TweenService:Create(card, TweenInfo.new(0.3, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+		Position = UDim2.new(0, 0, 0, 0),
+	}):Play()
+	task.delay(2.8, function()
+		local tw = TweenService:Create(card, TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
+			Position = UDim2.new(1, 30, 0, 0),
+			BackgroundTransparency = 1,
+		})
+		tw:Play()
+		tw.Completed:Wait()
+		card:Destroy()
+	end)
+end
+
+-- MAIN CONTAINER
+local Main = Instance.new("Frame")
+Main.Name = "Main"
+Main.Size = UDim2.new(0, WIN_W, 0, WIN_H)
+Main.Position = UDim2.new(0.5, -WIN_W / 2, 0.5, -WIN_H / 2)
+Main.BackgroundColor3 = THEME.bg
+Main.BorderSizePixel = 0
+Main.ClipsDescendants = true
+Main.Visible = false
+Main.Parent = ScreenGui
+
+-- Floating dots (monochrome-style sparkles on UI background)
+do
+	local dotsHost = Instance.new("Frame")
+	dotsHost.Name = "MonoDots"
+	dotsHost.Size = UDim2.new(1, 0, 1, 0)
+	dotsHost.BackgroundTransparency = 1
+	dotsHost.ZIndex = (Main.ZIndex or 5) + 1
+	dotsHost.ClipsDescendants = true
+	dotsHost.Parent = Main
+
+	local function spawnDot()
+		local d = Instance.new("Frame")
+		local sz = math.random(2, 5)
+		d.Size = UDim2.new(0, sz, 0, sz)
+		d.AnchorPoint = Vector2.new(0.5, 0.5)
+		d.Position = UDim2.new(math.random(), 0, math.random(), 0)
+		d.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+		d.BackgroundTransparency = math.random(35, 70) / 100
+		d.BorderSizePixel = 0
+		d.ZIndex = dotsHost.ZIndex
+		d.Parent = dotsHost
+		corner(d, sz)
+		local dur = 1.8 + math.random() * 2.2
+		local tx = d.Position.X.Scale + (math.random() - 0.5) * 0.15
+		local ty = d.Position.Y.Scale - (0.05 + math.random() * 0.12)
+		TweenService:Create(d, TweenInfo.new(dur, Enum.EasingStyle.Sine, Enum.EasingDirection.Out), {
+			Position = UDim2.new(math.clamp(tx, 0, 1), 0, math.clamp(ty, 0, 1), 0),
+			BackgroundTransparency = 1,
+			Size = UDim2.new(0, 1, 0, 1),
+		}):Play()
+		task.delay(dur + 0.05, function() pcall(function() d:Destroy() end) end)
+	end
+
+	task.spawn(function()
+		while dotsHost.Parent do
+			if Main.Visible then
+				for _ = 1, math.random(1, 3) do
+					spawnDot()
+				end
+			end
+			task.wait(0.35 + math.random() * 0.45)
+		end
+	end)
+end
+
+corner(Main, 12)
+
+-- Animated RGB Outer Stroke for Main Frame
+local mainStroke = stroke(Main, THEME.accent2, 1.6, 0.2)
+local mainGrad = Instance.new("UIGradient")
+mainGrad.Color = ColorSequence.new({
+	ColorSequenceKeypoint.new(0.0, THEME.neonPink),
+	ColorSequenceKeypoint.new(0.33, THEME.accent),
+	ColorSequenceKeypoint.new(0.66, THEME.accent2),
+	ColorSequenceKeypoint.new(1.0, THEME.neonPink),
+})
+mainGrad.Parent = mainStroke
+
+task.spawn(function()
+	while Main.Parent do
+		mainGrad.Rotation = (tick() * 55) % 360
+		task.wait(0.03)
+	end
+end)
+
+local BgImg = Instance.new("ImageLabel")
+BgImg.Size = UDim2.new(1, 0, 1, 0)
+BgImg.BackgroundTransparency = 1
+BgImg.Image = BG_ID
+BgImg.ImageTransparency = 0.88
+BgImg.ScaleType = Enum.ScaleType.Crop
+BgImg.ZIndex = 1
+BgImg.Parent = Main
+
+-- TITLE BAR
+local TitleBar = Instance.new("Frame")
+TitleBar.Size = UDim2.new(1, 0, 0, 68)
+TitleBar.BackgroundColor3 = THEME.title
+TitleBar.BackgroundTransparency = 0.25
+TitleBar.BorderSizePixel = 0
+TitleBar.ZIndex = 10
+TitleBar.Parent = Main
+
+local LogoWrap = Instance.new("Frame")
+LogoWrap.Size = UDim2.new(0, 38, 0, 38)
+LogoWrap.Position = UDim2.new(0, 12, 0.5, -19)
+LogoWrap.BackgroundColor3 = Color3.fromRGB(12, 10, 20)
+LogoWrap.BorderSizePixel = 0
+LogoWrap.ClipsDescendants = false
+LogoWrap.ZIndex = 12
+LogoWrap.Parent = TitleBar
+corner(LogoWrap, 9)
+
+local Logo = Instance.new("ImageLabel")
+Logo.Size = UDim2.new(1, 0, 1, 0)
+Logo.BackgroundTransparency = 1
+Logo.Image = LOGO_ID
+Logo.ScaleType = Enum.ScaleType.Fit
+Logo.ZIndex = 14
+Logo.Parent = LogoWrap
+corner(Logo, 9)
+attachMegaLogoAura(LogoWrap, Logo, false)
+
+local TitleLbl = Instance.new("TextLabel")
+TitleLbl.Size = UDim2.new(1, -130, 0, 22)
+TitleLbl.Position = UDim2.new(0, 58, 0, 13)
+TitleLbl.BackgroundTransparency = 1
+TitleLbl.Text = "KHUB · TIMEBOMB"
+TitleLbl.TextColor3 = Color3.new(1, 1, 1)
+TitleLbl.Font = Enum.Font.GothamBlack
+TitleLbl.TextSize = 16
+TitleLbl.TextXAlignment = Enum.TextXAlignment.Left
+TitleLbl.ZIndex = 11
+TitleLbl.Parent = TitleBar
+
+local TitleGrad = Instance.new("UIGradient")
+TitleGrad.Color = ColorSequence.new({
+	ColorSequenceKeypoint.new(0.0, THEME.accent),
+	ColorSequenceKeypoint.new(0.5, Color3.fromRGB(255, 255, 255)),
+	ColorSequenceKeypoint.new(1.0, THEME.neonPink),
+})
+TitleGrad.Parent = TitleLbl
+
+task.spawn(function()
+	while TitleLbl.Parent do
+		TitleGrad.Offset = Vector2.new(math.sin(tick() * 1.4) * 0.5, 0)
+		task.wait(0.03)
+	end
+end)
+
+local SubLbl = Instance.new("TextLabel")
+SubLbl.Size = UDim2.new(1, -130, 0, 16)
+SubLbl.Position = UDim2.new(0, 58, 0, 37)
+SubLbl.BackgroundTransparency = 1
+SubLbl.Text = "KHUB · by Kyiel Pambid"
+SubLbl.TextColor3 = THEME.dim
+SubLbl.Font = Enum.Font.Gotham
+SubLbl.TextSize = 11
+SubLbl.TextXAlignment = Enum.TextXAlignment.Left
+SubLbl.ZIndex = 11
+SubLbl.Parent = TitleBar
+
+local CloseBtn = Instance.new("TextButton")
+CloseBtn.Size = UDim2.new(0, 30, 0, 30)
+CloseBtn.Position = UDim2.new(1, -38, 0, 19)
+CloseBtn.BackgroundColor3 = Color3.fromRGB(46, 18, 30)
+CloseBtn.BackgroundTransparency = 0.2
+CloseBtn.Text = "✕"
+CloseBtn.TextColor3 = THEME.red
+CloseBtn.Font = Enum.Font.GothamBold
+CloseBtn.TextSize = 14
+CloseBtn.ZIndex = 12
+CloseBtn.Parent = TitleBar
+corner(CloseBtn, 7)
+stroke(CloseBtn, THEME.red, 1, 0.4)
+
+local MinBtn = Instance.new("TextButton")
+MinBtn.Size = UDim2.new(0, 30, 0, 30)
+MinBtn.Position = UDim2.new(1, -74, 0, 19)
+MinBtn.BackgroundColor3 = Color3.fromRGB(24, 26, 48)
+MinBtn.BackgroundTransparency = 0.2
+MinBtn.Text = "—"
+MinBtn.TextColor3 = THEME.text
+MinBtn.Font = Enum.Font.GothamBold
+MinBtn.TextSize = 14
+MinBtn.ZIndex = 12
+MinBtn.Parent = TitleBar
+corner(MinBtn, 7)
+stroke(MinBtn, THEME.blue, 1, 0.4)
+
+-- DRAGGABLE TITLEBAR
+do
+	local dragging, dragStart, startPos = false, nil, nil
+	TitleBar.InputBegan:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+			dragging = true
+			dragStart = input.Position
+			startPos = Main.Position
+			input.Changed:Connect(function()
+				if input.UserInputState == Enum.UserInputState.End then dragging = false end
+			end)
+		end
+	end)
+	UserInputService.InputChanged:Connect(function(input)
+		if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+			local delta = input.Position - dragStart
+			Main.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+		end
+	end)
+end
+
+-- BODY & SIDEBAR
+local Body = Instance.new("Frame")
+Body.Size = UDim2.new(1, 0, 1, -96)
+Body.Position = UDim2.new(0, 0, 0, 68)
+Body.BackgroundTransparency = 1
+Body.ZIndex = 5
+Body.Parent = Main
+
+local Footer = Instance.new("Frame")
+Footer.Size = UDim2.new(0, SIDE_W, 0, 28)
+Footer.Position = UDim2.new(0, 0, 1, -28)
+Footer.BackgroundColor3 = Color3.fromRGB(8, 10, 18)
+Footer.BackgroundTransparency = 0.2
+Footer.BorderSizePixel = 0
+Footer.ZIndex = 20
+Footer.Parent = Main
+corner(Footer, 6)
+stroke(Footer, THEME.green, 1.2, 0.3)
+
+local FootLabel = Instance.new("TextLabel")
+FootLabel.Size = UDim2.new(1, -6, 1, 0)
+FootLabel.Position = UDim2.new(0, 3, 0, 0)
+FootLabel.BackgroundTransparency = 1
+FootLabel.Text = "kyiel pambid · active"
+FootLabel.Font = Enum.Font.GothamBold
+FootLabel.TextSize = 10
+FootLabel.TextColor3 = THEME.green
+FootLabel.TextXAlignment = Enum.TextXAlignment.Center
+FootLabel.ZIndex = 21
+FootLabel.Parent = Footer
+
+local FootGrad = Instance.new("UIGradient")
+FootGrad.Color = ColorSequence.new({
+	ColorSequenceKeypoint.new(0.00, THEME.green),
+	ColorSequenceKeypoint.new(0.50, THEME.accent),
+	ColorSequenceKeypoint.new(1.00, THEME.neonPink),
+})
+FootGrad.Parent = FootLabel
+
+task.spawn(function()
+	while FootLabel.Parent do
+		FootGrad.Offset = Vector2.new(math.sin(tick() * 1.5) * 0.6, 0)
+		task.wait(0.03)
+	end
+end)
+
+local Sidebar = Instance.new("ScrollingFrame")
+Sidebar.Size = UDim2.new(0, SIDE_W, 1, 0)
+Sidebar.BackgroundColor3 = THEME.sidebar
+Sidebar.BackgroundTransparency = 0.35
+Sidebar.BorderSizePixel = 0
+Sidebar.ScrollBarThickness = 3
+Sidebar.ScrollBarImageColor3 = THEME.accent
+Sidebar.ScrollingEnabled = true
+Sidebar.ScrollingDirection = Enum.ScrollingDirection.Y
+Sidebar.CanvasSize = UDim2.new(0, 0, 0, 0)
+Sidebar.AutomaticCanvasSize = Enum.AutomaticSize.Y
+Sidebar.ClipsDescendants = true
+Sidebar.ZIndex = 6
+Sidebar.Parent = Body
+
+local sideLay = Instance.new("UIListLayout")
+sideLay.SortOrder = Enum.SortOrder.LayoutOrder
+sideLay.Padding = UDim.new(0, 5)
+sideLay.Parent = Sidebar
+local sidePad = Instance.new("UIPadding")
+sidePad.PaddingTop = UDim.new(0, 6)
+sidePad.PaddingLeft = UDim.new(0, 6)
+sidePad.PaddingRight = UDim.new(0, 6)
+sidePad.PaddingBottom = UDim.new(0, 10)
+sidePad.Parent = Sidebar
+
+local Content = Instance.new("Frame")
+Content.Size = UDim2.new(1, -SIDE_W, 1, 0)
+Content.Position = UDim2.new(0, SIDE_W, 0, 0)
+Content.BackgroundTransparency = 1
+Content.ZIndex = 6
+Content.Parent = Body
+
+local pages, tabButtons = {}, {}
+
+local function switchTab(id)
+	for name, pg in pairs(pages) do
+		if name == id then
+			pg.Visible = true
+			pg.Position = UDim2.new(0, 18, 0, 0)
+			TweenService:Create(pg, TweenInfo.new(0.22, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+				Position = UDim2.new(0, 0, 0, 0),
+			}):Play()
+		else
+			pg.Visible = false
+		end
+	end
+	for name, btn in pairs(tabButtons) do
+		local active = (name == id)
+		TweenService:Create(btn, TweenInfo.new(0.2), {
+			BackgroundColor3 = active and THEME.tabOn or THEME.tabOff,
+			BackgroundTransparency = active and 0.25 or 0.55,
+		}):Play()
+		local ind = btn:FindFirstChild("ActiveBar")
+		if ind then ind.Visible = active end
+		local ic = btn:FindFirstChild("TabIcon")
+		if ic then
+			TweenService:Create(ic, TweenInfo.new(0.2), {
+				ImageColor3 = active and THEME.accent or THEME.dim,
+			}):Play()
+		end
+	end
+end
+
+local function createTab(id, label, order, iconName)
+	local btn = Instance.new("TextButton")
+	btn.Name = id
+	btn.Size = UDim2.new(1, 0, 0, 34)
+	btn.BackgroundColor3 = THEME.tabOff
+	btn.BackgroundTransparency = 0.55
+	btn.Text = ""
+	btn.LayoutOrder = order
+	btn.ZIndex = 8
+	btn.Parent = Sidebar
+	corner(btn, 7)
+	local bar = Instance.new("Frame")
+	bar.Name = "ActiveBar"
+	bar.Size = UDim2.new(0, 3, 0.65, 0)
+	bar.Position = UDim2.new(0, 2, 0.18, 0)
+	bar.BackgroundColor3 = THEME.green
+	bar.BorderSizePixel = 0
+	bar.Visible = false
+	bar.ZIndex = 9
+	bar.Parent = btn
+	corner(bar, 2)
+	local iconImg = Instance.new("ImageLabel")
+	iconImg.Name = "TabIcon"
+	iconImg.Size = UDim2.new(0, 15, 0, 15)
+	iconImg.Position = UDim2.new(0, 8, 0.5, -8)
+	iconImg.BackgroundTransparency = 1
+	iconImg.Image = resolveIcon(iconName)
+	iconImg.ImageColor3 = THEME.dim
+	iconImg.ZIndex = 9
+	iconImg.Parent = btn
+	local txt = Instance.new("TextLabel")
+	txt.Size = UDim2.new(1, -28, 1, 0)
+	txt.Position = UDim2.new(0, 26, 0, 0)
+	txt.BackgroundTransparency = 1
+	txt.Text = label
+	txt.TextColor3 = THEME.text
+	txt.Font = Enum.Font.GothamMedium
+	txt.TextSize = 12
+	txt.TextXAlignment = Enum.TextXAlignment.Left
+	txt.ZIndex = 9
+	txt.Parent = btn
+	tabButtons[id] = btn
+	local page = Instance.new("ScrollingFrame")
+	page.Name = id
+	page.Size = UDim2.new(1, 0, 1, 0)
+	page.BackgroundTransparency = 1
+	page.BorderSizePixel = 0
+	page.ScrollBarThickness = 3
+	page.ScrollBarImageColor3 = THEME.accent
+	page.CanvasSize = UDim2.new(0, 0, 0, 0)
+	page.AutomaticCanvasSize = Enum.AutomaticSize.Y
+	page.ScrollingEnabled = true
+	page.Visible = false
+	page.ZIndex = 7
+	page.Parent = Content
+	local lay = Instance.new("UIListLayout")
+	lay.SortOrder = Enum.SortOrder.LayoutOrder
+	lay.Padding = UDim.new(0, 8)
+	lay.Parent = page
+	local pad = Instance.new("UIPadding")
+	pad.PaddingTop = UDim.new(0, 8)
+	pad.PaddingLeft = UDim.new(0, 10)
+	pad.PaddingRight = UDim.new(0, 10)
+	pad.PaddingBottom = UDim.new(0, 14)
+	pad.Parent = page
+	pages[id] = page
+	btn.MouseButton1Click:Connect(function()
+		createRipple(btn)
+		switchTab(id)
+	end)
+	return page
+end
+
+local function tabMessages(parent, lines)
+	if not lines or #lines == 0 then return end
+	local box = Instance.new("Frame")
+	box.Size = UDim2.new(1, 0, 0, 0)
+	box.AutomaticSize = Enum.AutomaticSize.Y
+	box.BackgroundColor3 = Color3.fromRGB(10, 12, 22)
+	box.BackgroundTransparency = 0.25
+	box.BorderSizePixel = 0
+	box.ZIndex = 9
+	box.Parent = parent
+	corner(box, 8)
+	stroke(box, THEME.green, 1.2, 0.4)
+	local lay = Instance.new("UIListLayout")
+	lay.SortOrder = Enum.SortOrder.LayoutOrder
+	lay.Padding = UDim.new(0, 4)
+	lay.Parent = box
+	local pad = Instance.new("UIPadding")
+	pad.PaddingTop = UDim.new(0, 8)
+	pad.PaddingBottom = UDim.new(0, 8)
+	pad.PaddingLeft = UDim.new(0, 10)
+	pad.PaddingRight = UDim.new(0, 10)
+	pad.Parent = box
+	for i, raw in ipairs(lines) do
+		local col, msg = THEME.green, raw
+		if string.sub(raw, 1, 2) == "<>" then
+			col = THEME.green; msg = string.gsub(string.sub(raw, 3), "^%s+", "")
+		elseif string.sub(raw, 1, 1) == "$" then
+			col = THEME.neonPink; msg = string.gsub(string.sub(raw, 2), "^%s+", "")
+		elseif string.sub(raw, 1, 1) == ">" then
+			col = THEME.blue; msg = string.gsub(string.sub(raw, 2), "^%s+", "")
+		end
+		local l = Instance.new("TextLabel")
+		l.Size = UDim2.new(1, 0, 0, 0)
+		l.AutomaticSize = Enum.AutomaticSize.Y
+		l.BackgroundTransparency = 1
+		l.Text = msg
+		l.TextColor3 = col
+		l.Font = Enum.Font.GothamMedium
+		l.TextSize = 11
+		l.TextWrapped = true
+		l.TextXAlignment = Enum.TextXAlignment.Left
+		l.LayoutOrder = i
+		l.ZIndex = 10
+		l.Parent = box
+	end
+	return box
+end
+
+local function section(parent, title)
+	local f = Instance.new("Frame")
+	f.Size = UDim2.new(1, 0, 0, 0)
+	f.AutomaticSize = Enum.AutomaticSize.Y
+	f.BackgroundColor3 = THEME.card
+	f.BackgroundTransparency = 0.35
+	f.BorderSizePixel = 0
+	f.ZIndex = 8
+	f.Parent = parent
+	corner(f, 8)
+	stroke(f, THEME.accent2, 1, 0.55)
+	local pad = Instance.new("UIPadding")
+	pad.PaddingTop = UDim.new(0, 8)
+	pad.PaddingBottom = UDim.new(0, 8)
+	pad.PaddingLeft = UDim.new(0, 10)
+	pad.PaddingRight = UDim.new(0, 10)
+	pad.Parent = f
+	local lay = Instance.new("UIListLayout")
+	lay.Padding = UDim.new(0, 6)
+	lay.Parent = f
+	local h = Instance.new("TextLabel")
+	h.Size = UDim2.new(1, 0, 0, 16)
+	h.BackgroundTransparency = 1
+	h.Text = title
+	h.TextColor3 = THEME.accent
+	h.Font = Enum.Font.GothamBold
+	h.TextSize = 12
+	h.TextXAlignment = Enum.TextXAlignment.Left
+	h.ZIndex = 9
+	h.Parent = f
+	return f
+end
+
+local function addToggle(parent, text, default, callback)
+	local on = default == true
+	local row = Instance.new("Frame")
+	row.Size = UDim2.new(1, 0, 0, 32)
+	row.BackgroundColor3 = THEME.element
+	row.BackgroundTransparency = 0.35
+	row.BorderSizePixel = 0
+	row.ZIndex = 9
+	row.Parent = parent
+	corner(row, 6)
+	local lbl = Instance.new("TextLabel")
+	lbl.Size = UDim2.new(1, -54, 1, 0)
+	lbl.Position = UDim2.new(0, 8, 0, 0)
+	lbl.BackgroundTransparency = 1
+	lbl.Text = text
+	lbl.TextColor3 = THEME.text
+	lbl.Font = Enum.Font.GothamMedium
+	lbl.TextSize = 12
+	lbl.TextXAlignment = Enum.TextXAlignment.Left
+	lbl.ZIndex = 10
+	lbl.Parent = row
+	local outer = Instance.new("Frame")
+	outer.Size = UDim2.new(0, 38, 0, 18)
+	outer.Position = UDim2.new(1, -44, 0.5, -9)
+	outer.BackgroundColor3 = Color3.fromRGB(45, 48, 68)
+	outer.ZIndex = 10
+	outer.Parent = row
+	corner(outer, 9)
+	local kn = Instance.new("Frame")
+	kn.Size = UDim2.new(0, 14, 0, 14)
+	kn.Position = UDim2.new(0, 2, 0.5, -7)
+	kn.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+	kn.ZIndex = 11
+	kn.Parent = outer
+	corner(kn, 7)
+	local function paint()
+		TweenService:Create(outer, TweenInfo.new(0.2), {
+			BackgroundColor3 = on and THEME.green or Color3.fromRGB(45, 48, 68),
+		}):Play()
+		TweenService:Create(kn, TweenInfo.new(0.2, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+			Position = on and UDim2.new(1, -16, 0.5, -7) or UDim2.new(0, 2, 0.5, -7),
+		}):Play()
+	end
+	paint()
+	local hit = Instance.new("TextButton")
+	hit.Size = UDim2.new(1, 0, 1, 0)
+	hit.BackgroundTransparency = 1
+	hit.Text = ""
+	hit.ZIndex = 12
+	hit.Parent = row
+	hit.MouseButton1Click:Connect(function()
+		createRipple(hit)
+		on = not on
+		paint()
+		notify(text, on and "Enabled" or "Disabled", on)
+		if callback then callback(on) end
+	end)
+	return row
+end
+
+local function addSlider(parent, text, min, max, default, callback)
+	local value = default or min
+	local row = Instance.new("Frame")
+	row.Size = UDim2.new(1, 0, 0, 50)
+	row.BackgroundColor3 = THEME.element
+	row.BackgroundTransparency = 0.35
+	row.BorderSizePixel = 0
+	row.ZIndex = 9
+	row.Parent = parent
+	corner(row, 6)
+	local lbl = Instance.new("TextLabel")
+	lbl.Size = UDim2.new(1, -12, 0, 18)
+	lbl.Position = UDim2.new(0, 8, 0, 4)
+	lbl.BackgroundTransparency = 1
+	lbl.Text = text .. ": " .. tostring(value)
+	lbl.TextColor3 = THEME.text
+	lbl.Font = Enum.Font.GothamMedium
+	lbl.TextSize = 12
+	lbl.TextXAlignment = Enum.TextXAlignment.Left
+	lbl.ZIndex = 10
+	lbl.Parent = row
+	local bar = Instance.new("Frame")
+	bar.Size = UDim2.new(1, -16, 0, 8)
+	bar.Position = UDim2.new(0, 8, 0, 32)
+	bar.BackgroundColor3 = Color3.fromRGB(40, 42, 60)
+	bar.BorderSizePixel = 0
+	bar.ZIndex = 10
+	bar.Parent = row
+	corner(bar, 4)
+	local fill = Instance.new("Frame")
+	local ratio = (value - min) / math.max(1, (max - min))
+	fill.Size = UDim2.new(ratio, 0, 1, 0)
+	fill.BackgroundColor3 = THEME.accent
+	fill.BorderSizePixel = 0
+	fill.ZIndex = 11
+	fill.Parent = bar
+	corner(fill, 4)
+	local fillGrad = Instance.new("UIGradient")
+	fillGrad.Color = ColorSequence.new({
+		ColorSequenceKeypoint.new(0.0, THEME.neonPink),
+		ColorSequenceKeypoint.new(1.0, THEME.accent),
+	})
+	fillGrad.Parent = fill
+	local dragging = false
+	local function setFromX(x)
+		local rel = math.clamp((x - bar.AbsolutePosition.X) / math.max(1, bar.AbsoluteSize.X), 0, 1)
+		value = math.floor(min + rel * (max - min) + 0.5)
+		fill.Size = UDim2.new(rel, 0, 1, 0)
+		lbl.Text = text .. ": " .. tostring(value)
+		if callback then callback(value) end
+	end
+	bar.InputBegan:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+			dragging = true; setFromX(input.Position.X)
+		end
+	end)
+	UserInputService.InputEnded:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then dragging = false end
+	end)
+	UserInputService.InputChanged:Connect(function(input)
+		if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+			setFromX(input.Position.X)
+		end
+	end)
+	return row
+end
+
+local function addButton(parent, text, cb, col)
+	local b = Instance.new("TextButton")
+	b.Size = UDim2.new(1, 0, 0, 34)
+	b.BackgroundColor3 = col or Color3.fromRGB(30, 36, 62)
+	b.BackgroundTransparency = 0.25
+	b.Text = text
+	b.TextColor3 = THEME.text
+	b.Font = Enum.Font.GothamBold
+	b.TextSize = 12
+	b.ZIndex = 9
+	b.Parent = parent
+	corner(b, 7)
+	stroke(b, col or THEME.accent, 1, 0.45)
+	b.MouseButton1Click:Connect(function()
+		createRipple(b)
+		notify(text, "Triggered", true)
+		if cb then cb() end
+	end)
+	return b
+end
+
+local function addLabel(parent, text, size, col)
+	local l = Instance.new("TextLabel")
+	l.Size = UDim2.new(1, 0, 0, 0)
+	l.AutomaticSize = Enum.AutomaticSize.Y
+	l.BackgroundTransparency = 1
+	l.Text = text
+	l.TextColor3 = col or THEME.dim
+	l.Font = Enum.Font.Gotham
+	l.TextSize = size or 11
+	l.TextWrapped = true
+	l.TextXAlignment = Enum.TextXAlignment.Left
+	l.ZIndex = 9
+	l.Parent = parent
+	return l
+end
+
+local function addTextbox(parent, text, placeholder, callback)
+	local row = Instance.new("Frame")
+	row.Size = UDim2.new(1, 0, 0, 54)
+	row.BackgroundTransparency = 1
+	row.ZIndex = 9
+	row.Parent = parent
+	local lbl = Instance.new("TextLabel")
+	lbl.Size = UDim2.new(1, 0, 0, 16)
+	lbl.BackgroundTransparency = 1
+	lbl.Text = text
+	lbl.TextColor3 = THEME.text
+	lbl.Font = Enum.Font.GothamMedium
+	lbl.TextSize = 12
+	lbl.TextXAlignment = Enum.TextXAlignment.Left
+	lbl.ZIndex = 10
+	lbl.Parent = row
+	local box = Instance.new("TextBox")
+	box.Size = UDim2.new(1, 0, 0, 30)
+	box.Position = UDim2.new(0, 0, 0, 22)
+	box.BackgroundColor3 = THEME.element
+	box.BackgroundTransparency = 0.25
+	box.PlaceholderText = placeholder or ""
+	box.Text = ""
+	box.TextColor3 = THEME.text
+	box.Font = Enum.Font.Gotham
+	box.TextSize = 12
+	box.ClearTextOnFocus = false
+	box.ZIndex = 10
+	box.Parent = row
+	corner(box, 6)
+	stroke(box, THEME.accent2, 1, 0.5)
+	box.FocusLost:Connect(function() pcall(callback, box.Text) end)
+	return box
+end
+
+
+local function addDropdown(parent, text, options, multi, callback)
+	options = options or {}
+	local selected, open = {}, false
+	local row = Instance.new("Frame")
+	row.Size = UDim2.new(1, 0, 0, 36)
+	row.BackgroundTransparency = 1
+	row.ZIndex = 9
+	row.Parent = parent
+	row.ClipsDescendants = false
+	local btn = Instance.new("TextButton")
+	btn.Size = UDim2.new(1, 0, 0, 32)
+	btn.BackgroundColor3 = THEME.element
+	btn.BackgroundTransparency = 0.25
+	btn.Text = text .. ": (none)"
+	btn.TextColor3 = THEME.text
+	btn.Font = Enum.Font.GothamMedium
+	btn.TextSize = 12
+	btn.TextXAlignment = Enum.TextXAlignment.Left
+	btn.ZIndex = 10
+	btn.Parent = row
+	corner(btn, 6)
+	local pad = Instance.new("UIPadding")
+	pad.PaddingLeft = UDim.new(0, 10)
+	pad.Parent = btn
+	local list = Instance.new("ScrollingFrame")
+	list.Size = UDim2.new(1, 0, 0, 0)
+	list.Position = UDim2.new(0, 0, 0, 34)
+	list.BackgroundColor3 = THEME.card
+	list.BackgroundTransparency = 0.1
+	list.BorderSizePixel = 0
+	list.Visible = false
+	list.ZIndex = 30
+	list.ScrollBarThickness = 3
+	list.AutomaticCanvasSize = Enum.AutomaticSize.Y
+	list.CanvasSize = UDim2.new(0, 0, 0, 0)
+	list.Parent = row
+	corner(list, 6)
+	local lay = Instance.new("UIListLayout")
+	lay.SortOrder = Enum.SortOrder.LayoutOrder
+	lay.Parent = list
+	local function refreshLabel()
+		local names = {}
+		for k, v in pairs(selected) do if v then table.insert(names, tostring(k)) end end
+		table.sort(names)
+		if #names == 0 then btn.Text = text .. ": (none)"
+		elseif not multi then btn.Text = text .. ": " .. (names[1] or "none")
+		elseif #names <= 2 then btn.Text = text .. ": " .. table.concat(names, ", ")
+		else btn.Text = text .. ": " .. #names .. " selected" end
+	end
+	local function rebuild()
+		for _, ch in ipairs(list:GetChildren()) do
+			if ch:IsA("TextButton") then ch:Destroy() end
+		end
+		for i, opt in ipairs(options) do
+			local o = Instance.new("TextButton")
+			o.Size = UDim2.new(1, 0, 0, 26)
+			o.BackgroundColor3 = selected[opt] and Color3.fromRGB(40, 90, 60) or THEME.element
+			o.BackgroundTransparency = 0.3
+			o.Text = (selected[opt] and "✓ " or "  ") .. opt
+			o.TextColor3 = selected[opt] and THEME.green or THEME.text
+			o.Font = Enum.Font.Gotham
+			o.TextSize = 11
+			o.TextXAlignment = Enum.TextXAlignment.Left
+			o.LayoutOrder = i
+			o.ZIndex = 31
+			o.Parent = list
+			corner(o, 4)
+			local op = Instance.new("UIPadding")
+			op.PaddingLeft = UDim.new(0, 8)
+			op.Parent = o
+			o.MouseButton1Click:Connect(function()
+				if multi then
+					selected[opt] = not selected[opt]
+				else
+					table.clear(selected)
+					selected[opt] = true
+					open = false
+					list.Visible = false
+					row.Size = UDim2.new(1, 0, 0, 36)
+				end
+				rebuild()
+				refreshLabel()
+				if callback then
+					if multi then callback(selected) else callback(opt) end
+				end
+			end)
+		end
+		list.Size = UDim2.new(1, 0, 0, math.min(26 * math.max(#options, 1) + 4, 140))
+	end
+	btn.MouseButton1Click:Connect(function()
+		open = not open
+		list.Visible = open
+		row.Size = UDim2.new(1, 0, 0, open and (36 + math.min(26 * math.max(#options, 1) + 4, 140)) or 36)
+		if open then rebuild() end
+	end)
+	rebuild()
+	refreshLabel()
+	return {
+		SetOptions = function(_, opts) options = opts or {}; rebuild(); refreshLabel() end,
+		SetValue = function(_, val)
+			table.clear(selected)
+			if multi and type(val) == "table" then
+				for _, v in ipairs(val) do selected[v] = true end
+			elseif val then
+				selected[val] = true
+			end
+			rebuild(); refreshLabel()
+		end,
+	}
+end
+
+local function collapsibleSection(parent, title)
+	local wrap = Instance.new("Frame")
+	wrap.Size = UDim2.new(1, 0, 0, 0)
+	wrap.AutomaticSize = Enum.AutomaticSize.Y
+	wrap.BackgroundTransparency = 1
+	wrap.ZIndex = 8
+	wrap.Parent = parent
+
+	local header = Instance.new("TextButton")
+	header.Size = UDim2.new(1, 0, 0, 28)
+	header.BackgroundColor3 = THEME.card
+	header.BackgroundTransparency = 0.25
+	header.Text = ""
+	header.ZIndex = 9
+	header.Parent = wrap
+	corner(header, 6)
+	stroke(header, THEME.accent2, 1, 0.55)
+
+	local titleLbl = Instance.new("TextLabel")
+	titleLbl.Size = UDim2.new(1, -40, 1, 0)
+	titleLbl.Position = UDim2.new(0, 10, 0, 0)
+	titleLbl.BackgroundTransparency = 1
+	titleLbl.Text = title
+	titleLbl.TextColor3 = THEME.gold
+	titleLbl.Font = Enum.Font.GothamBold
+	titleLbl.TextSize = 12
+	titleLbl.TextXAlignment = Enum.TextXAlignment.Left
+	titleLbl.ZIndex = 10
+	titleLbl.Parent = header
+
+	local chev = Instance.new("TextLabel")
+	chev.Size = UDim2.new(0, 28, 1, 0)
+	chev.Position = UDim2.new(1, -30, 0, 0)
+	chev.BackgroundTransparency = 1
+	chev.Text = "↓"
+	chev.TextColor3 = THEME.accent
+	chev.Font = Enum.Font.GothamBold
+	chev.TextSize = 14
+	chev.ZIndex = 10
+	chev.Parent = header
+
+	local body = Instance.new("Frame")
+	body.Size = UDim2.new(1, 0, 0, 0)
+	body.AutomaticSize = Enum.AutomaticSize.Y
+	body.Position = UDim2.new(0, 0, 0, 30)
+	body.BackgroundTransparency = 1
+	body.ZIndex = 9
+	body.Visible = true
+	body.Parent = wrap
+
+	local blay = Instance.new("UIListLayout")
+	blay.SortOrder = Enum.SortOrder.LayoutOrder
+	blay.Padding = UDim.new(0, 6)
+	blay.Parent = body
+	local bpad = Instance.new("UIPadding")
+	bpad.PaddingTop = UDim.new(0, 4)
+	bpad.PaddingBottom = UDim.new(0, 6)
+	bpad.PaddingLeft = UDim.new(0, 2)
+	bpad.PaddingRight = UDim.new(0, 2)
+	bpad.Parent = body
+
+	local expanded = true
+	header.MouseButton1Click:Connect(function()
+		expanded = not expanded
+		body.Visible = expanded
+		chev.Text = expanded and "↓" or "↑"
+	end)
+	return body
+end
+
+-- ============================================================
+-- TABS DEFINITION
+-- ============================================================
+local PageWelcome  = createTab("Welcome",  "Welcome",  1, "welcome")
+local PageCombat   = createTab("Combat",   "Combat",   2, "sword")
+local PageMovement = createTab("Movement", "Movement", 3, "user")
+local PageHitbox   = createTab("Hitbox",   "Hitbox",   4, "target")
+local PageVisual   = createTab("Visual",   "Visual",   5, "info")
+local PageSettings = createTab("Settings", "Settings", 6, "settings")
+local PageServer   = createTab("Server",   "Server",   7, "server")
+
+
+-- WELCOME
+do
+	local Hero = Instance.new("Frame")
+	Hero.Size = UDim2.new(1, 0, 0, 120)
+	Hero.BackgroundColor3 = THEME.card
+	Hero.BackgroundTransparency = 0.35
+	Hero.BorderSizePixel = 0
+	Hero.ZIndex = 8
+	Hero.Parent = PageWelcome
+	corner(Hero, 10)
+	stroke(Hero, THEME.neonPink, 1.2, 0.4)
+
+	local HeroText = Instance.new("TextLabel")
+	HeroText.Size = UDim2.new(1, -24, 0, 52)
+	HeroText.Position = UDim2.fromOffset(14, 12)
+	HeroText.BackgroundTransparency = 1
+	HeroText.Text = "KHUB"
+	HeroText.Font = Enum.Font.GothamBlack
+	HeroText.TextSize = 48
+	HeroText.TextColor3 = Color3.new(1, 1, 1)
+	HeroText.TextXAlignment = Enum.TextXAlignment.Left
+	HeroText.ZIndex = 10
+	HeroText.Parent = Hero
+	local HeroGrad = Instance.new("UIGradient")
+	HeroGrad.Color = ColorSequence.new({
+		ColorSequenceKeypoint.new(0.00, THEME.accent),
+		ColorSequenceKeypoint.new(0.35, Color3.new(1, 1, 1)),
+		ColorSequenceKeypoint.new(0.65, THEME.neonPink),
+		ColorSequenceKeypoint.new(1.00, THEME.gold),
+	})
+	HeroGrad.Parent = HeroText
+	task.spawn(function()
+		while HeroText.Parent do
+			local t = (tick() % 3) / 3
+			HeroGrad.Offset = Vector2.new(-1.4 + t * 2.8, 0)
+			task.wait(0.03)
+		end
+	end)
+
+	local HeroBy = Instance.new("TextLabel")
+	HeroBy.Size = UDim2.new(1, -24, 0, 18)
+	HeroBy.Position = UDim2.fromOffset(16, 68)
+	HeroBy.BackgroundTransparency = 1
+	HeroBy.Text = "Timebomb Premium · by Kyiel Pambid"
+	HeroBy.Font = Enum.Font.GothamBold
+	HeroBy.TextSize = 13
+	HeroBy.TextColor3 = THEME.gold
+	HeroBy.TextXAlignment = Enum.TextXAlignment.Left
+	HeroBy.ZIndex = 10
+	HeroBy.Parent = Hero
+
+	local HeroType = Instance.new("TextLabel")
+	HeroType.Size = UDim2.new(1, -24, 0, 16)
+	HeroType.Position = UDim2.fromOffset(16, 92)
+	HeroType.BackgroundTransparency = 1
+	HeroType.Text = ""
+	HeroType.Font = Enum.Font.Code
+	HeroType.TextSize = 11
+	HeroType.TextColor3 = THEME.dim
+	HeroType.TextXAlignment = Enum.TextXAlignment.Left
+	HeroType.ZIndex = 10
+	HeroType.Parent = Hero
+
+	task.spawn(function()
+		local phrases = {
+			"Join Discord for more scripts",
+			"Subscribe on my channel",
+			"Toggle: RightShift / RightCtrl / K",
+			"Timebomb Premium · KHUB",
+			"PC & Mobile ready",
+		}
+		while HeroType.Parent do
+			for _, phrase in ipairs(phrases) do
+				if not HeroType.Parent then break end
+				HeroType.Text = ""
+				for i = 1, #phrase do
+					if not HeroType.Parent then break end
+					HeroType.Text = string.sub(phrase, 1, i)
+					task.wait(0.026)
+				end
+				task.wait(1.8)
+				for i = #phrase, 1, -1 do
+					if not HeroType.Parent then break end
+					HeroType.Text = string.sub(phrase, 1, i)
+					task.wait(0.012)
+				end
+				task.wait(0.2)
+			end
+		end
+	end)
+
+	local c = section(PageWelcome, "PROFILE")
+	local PF = Instance.new("Frame")
+	PF.Size = UDim2.new(1, 0, 0, 80)
+	PF.BackgroundColor3 = THEME.element
+	PF.BackgroundTransparency = 0.35
+	PF.BorderSizePixel = 0
+	PF.ZIndex = 9
+	PF.Parent = c
+	corner(PF, 8)
+	local Avatar = Instance.new("ImageLabel")
+	Avatar.Size = UDim2.fromOffset(56, 56)
+	Avatar.Position = UDim2.new(0, 10, 0.5, -28)
+	Avatar.BackgroundColor3 = Color3.fromRGB(30, 36, 68)
+	Avatar.ZIndex = 10
+	Avatar.Parent = PF
+	corner(Avatar, 28)
+	pcall(function()
+		local content, ready = Players:GetUserThumbnailAsync(player.UserId, Enum.ThumbnailType.HeadShot, Enum.ThumbnailSize.Size150x150)
+		if ready then Avatar.Image = content end
+	end)
+	local name = Instance.new("TextLabel")
+	name.Size = UDim2.new(1, -80, 0, 20)
+	name.Position = UDim2.new(0, 76, 0, 12)
+	name.BackgroundTransparency = 1
+	name.Text = "Welcome, " .. (player.DisplayName or player.Name) .. "!"
+	name.TextColor3 = THEME.gold
+	name.Font = Enum.Font.GothamBold
+	name.TextSize = 13
+	name.TextXAlignment = Enum.TextXAlignment.Left
+	name.ZIndex = 10
+	name.Parent = PF
+	local uname = Instance.new("TextLabel")
+	uname.Size = UDim2.new(1, -80, 0, 16)
+	uname.Position = UDim2.new(0, 76, 0, 34)
+	uname.BackgroundTransparency = 1
+	uname.Text = "@" .. player.Name
+	uname.TextColor3 = THEME.dim
+	uname.Font = Enum.Font.Gotham
+	uname.TextSize = 11
+	uname.TextXAlignment = Enum.TextXAlignment.Left
+	uname.ZIndex = 10
+	uname.Parent = PF
+
+	local links = section(PageWelcome, "JOIN & SUBSCRIBE")
+	addButton(links, "JOIN DISCORD FOR MORE SCRIPTS", function()
+		pcall(function() if setclipboard then setclipboard(DISCORD) end end)
+	end, Color3.fromRGB(48, 68, 160))
+	addButton(links, "SUBSCRIBE ON YOUTUBE", function()
+		pcall(function() if setclipboard then setclipboard(YOUTUBE) end end)
+	end, Color3.fromRGB(160, 42, 54))
+end
+
+-- COMBAT
+do
+	tabMessages(PageCombat, {
+		"<> Script made by KHUB · Kyiel Pambid",
+		"<> Follow V1 works without a bomb while you stand still.",
+		"$ Follow V2 and Auto Flick need a bomb equipped.",
+		"<> Double Deck: stand still on a red zone to fake-flick up. Auto Follow pauses on the red zone.",
+		"> Report bugs on Discord if something misbehaves.",
+	})
+	local s = section(PageCombat, "TARGETING")
+	addToggle(s, "Auto Face Nearby", false, function(v) autoFaceNearby = v end)
+	addToggle(s, "Auto Follow V1 (No Bomb)", false, function(v) autoFollowV1 = v end)
+	addToggle(s, "Auto Follow V2 (Bomb needed)", false, function(v) autoFollow = v end)
+
+	local s2 = section(PageCombat, "AUTO FLICK")
+	addToggle(s2, "Auto Flick (Bomb needed)", false, function(v) autoFlick = v end)
+	addButton(s2, "Cycle Flick Mode", function()
+		autoFlickMode = (autoFlickMode == "Mode 1") and "Mode 2" or "Mode 1"
+		notify("Flick Mode", autoFlickMode, true)
+	end)
+
+	local s3 = section(PageCombat, "JUMP & WALLHOP")
+	addToggle(s3, "Infinite Jump", false, function(v) infJump = v end)
+	addToggle(s3, "Wallhop V1 (old)", false, function(v) wallhopV1 = v end)
+	addToggle(s3, "Wallhop V2 (smooth)", false, function(v) wallhopV2 = v end)
+
+	local s4 = section(PageCombat, "DOUBLE DECK")
+	addToggle(s4, "Red Zone 1", false, function(v)
+		setZone1(v)
+	end)
+	addToggle(s4, "Red Zone 2", false, function(v)
+		setZone2(v)
+	end)
+end
+
+-- MOVEMENT
+do
+	tabMessages(PageMovement, {
+		"<> Script made by KHUB · Kyiel Pambid",
+		"<> Enable TPWalk and raise the multiplier for faster ground movement.",
+		"$ TPWalk only applies while you are on the ground.",
+		"> Disable TPWalk to restore normal walk speed.",
+	})
+	local s = section(PageMovement, "TPWALK")
+	addSlider(s, "TPWalk Multiplier (x0.1)", 1, 50, 10, function(v)
+		tpWalkMult = v / 10
+	end)
+	addToggle(s, "Enable TPWalk", false, function(v)
+		tpWalk = v
+		if not v then
+			local char = LocalPlayer.Character
+			local hum = char and char:FindFirstChildOfClass("Humanoid")
+			if hum then hum.WalkSpeed = 16 end
+		end
+	end)
+end
+
+-- HITBOX
+do
+	tabMessages(PageHitbox, {
+		"<> Script made by KHUB · Kyiel Pambid",
+		"<> Pick V1 (size 7 recommended) or V2 body groups, then enable hitboxes.",
+		"$ V1 expands all limbs evenly. V2 uses separate torso / arms / legs sizes.",
+		"> Premium floor ring appears under you when hitboxes are on.",
+	})
+	local s = section(PageHitbox, "MODE")
+	addButton(s, "Use Hitbox V1 (recommend 7)", function()
+		hitboxMode = "V1"
+		hitboxSize = 7
+		if hitboxEnabled then applyAllHitboxes() end
+		notify("Hitbox", "V1 · size 7", true)
+	end)
+	addButton(s, "Use Hitbox V2 (body groups)", function()
+		hitboxMode = "V2"
+		hitboxTorso, hitboxArms, hitboxLegs = 5, 5, 5
+		if hitboxEnabled then applyAllHitboxes() end
+		notify("Hitbox", "V2 · sizes 5", true)
+	end)
+	local s1 = section(PageHitbox, "V1 SIZE")
+	addSlider(s1, "V1 Size (3-13)", 3, 13, 7, function(v)
+		hitboxSize = v
+		if hitboxEnabled and hitboxMode == "V1" then applyAllHitboxes() end
+	end)
+	local s2 = section(PageHitbox, "V2 SIZES")
+	addSlider(s2, "V2 Torso/Root", 1, 15, 5, function(v)
+		hitboxTorso = v
+		if hitboxEnabled and hitboxMode == "V2" then applyAllHitboxes() end
+	end)
+	addSlider(s2, "V2 Arms", 1, 15, 5, function(v)
+		hitboxArms = v
+		if hitboxEnabled and hitboxMode == "V2" then applyAllHitboxes() end
+	end)
+	addSlider(s2, "V2 Legs", 1, 15, 5, function(v)
+		hitboxLegs = v
+		if hitboxEnabled and hitboxMode == "V2" then applyAllHitboxes() end
+	end)
+	local s3 = section(PageHitbox, "ENABLE")
+	addToggle(s3, "Transparent Hitbox", true, function(v)
+		hitboxTransparent = v
+		if hitboxEnabled then applyAllHitboxes() end
+	end)
+	addToggle(s3, "Enable Hitboxes", false, function(v)
+		hitboxEnabled = v
+		if v then applyAllHitboxes() else clearAllHitboxes() end
+		pcall(function() ensureFloorRing(v) end)
+	end)
+end
+
+-- VISUAL
+do
+	tabMessages(PageVisual, {
+		"<> Script made by KHUB · Kyiel Pambid",
+		"<> Player ESP shows avatar and highlight through walls.",
+		"<> Bomb ESP highlights bombs through walls under Player ESP.",
+		"$ Client Headless / Korblox are local-only cosmetics.",
+		"> Anti-Detect helps reduce basic kick / velocity flags.",
+	})
+	local s = section(PageVisual, "PLAYER ESP")
+	addToggle(s, "Player ESP (Avatar + Highlight)", false, function(v)
+		playerESP = v
+		if not v then pcall(clearAllPlayerESP) end
+	end)
+	local sBomb = section(PageVisual, "BOMB ESP")
+	addToggle(sBomb, "Bomb ESP (Highlight + Label)", false, function(v)
+		bombESP = v
+		if v then
+			pcall(scanBombs)
+		else
+			pcall(clearAllBombESP)
+		end
+	end)
+	local s2 = section(PageVisual, "CLIENT")
+	addToggle(s2, "Client Headless", false, function(v)
+		headless = v
+		if v then
+			applyLocalCosmetics(LocalPlayer.Character)
+		end
+	end)
+	addToggle(s2, "Client Korblox", false, function(v)
+		korblox = v
+		if v then
+			applyLocalCosmetics(LocalPlayer.Character)
+		end
+	end)
+	local util = section(PageVisual, "UTILITIES")
+	addToggle(util, "Anti-Detect V1 (Block Kick)", false, function(v) antiDetectV1 = v end)
+	addToggle(util, "Anti-Detect V2 (Velocity Clamp)", false, function(v) antiDetectV2 = v end)
+	addButton(util, "Rejoin Server", function()
+		pcall(function() TeleportService:TeleportToPlaceInstance(game.PlaceId, game.JobId, LocalPlayer) end)
+	end)
+	addButton(util, "Server Hop", function()
+		pcall(function()
+			local data = HttpService:JSONDecode(game:HttpGet(
+				"https://games.roblox.com/v1/games/" .. game.PlaceId .. "/servers/Public?sortOrder=Desc&limit=100"
+			))
+			for _, s in ipairs(data.data or {}) do
+				if s.id ~= game.JobId and s.playing < s.maxPlayers then
+					TeleportService:TeleportToPlaceInstance(game.PlaceId, s.id, LocalPlayer)
+					return
+				end
+			end
+		end)
+	end)
+	addButton(util, "Unload Script", function()
+		ScriptAlive = false
+		hitboxEnabled = false
+		pcall(clearAllHitboxes)
+		pcall(function() ensureFloorRing(false) end)
+		autoFollow = false
+		autoFollowV1 = false
+		autoFaceNearby = false
+		playerESP = false
+		bombESP = false
+		pcall(clearAllPlayerESP)
+		pcall(clearAllBombESP)
+		autoFlick = false
+		tpWalk = false
+		pcall(function() setZone1(false) end)
+		pcall(function() setZone2(false) end)
+		pcall(function() setFPSBoostV1(false) end)
+		pcall(function() setFPSBoostV2(false) end)
+		pcall(function() setFPSBoostV3(false) end)
+		pcall(function() ScreenGui:Destroy() end)
+		notify("Unload", "Script unloaded", false)
+	end, Color3.fromRGB(80, 30, 40))
+end
+
+-- SETTINGS
+do
+	tabMessages(PageSettings, {
+		"<> Script made by KHUB · Kyiel Pambid",
+		"<> FPS Boost V1–V3 live here. V3 is the dark orange visual pack.",
+		"$ Save config stores keybinds for next session.",
+		"> Change Toggle UI keybind anytime on PC.",
+	})
+	local fps = section(PageSettings, "FPS BOOST")
+	addToggle(fps, "FPS Boost V1", false, function(v) setFPSBoostV1(v) end)
+	addToggle(fps, "FPS Boost V2", false, function(v) setFPSBoostV2(v) end)
+	addToggle(fps, "FPS Boost V3 (Dark Orange)", false, function(v) setFPSBoostV3(v) end)
+
+	local cfgName = "default"
+	local cfg = section(PageSettings, "CONFIG")
+	addTextbox(cfg, "Config Name", "default", function(t)
+		cfgName = (t and t:gsub("%s+", "") ~= "") and t:gsub("%s+", "") or "default"
+	end)
+	addButton(cfg, "Save Config", function()
+		pcall(function()
+			if isfolder and not isfolder(CONFIG_FOLDER) then makefolder(CONFIG_FOLDER) end
+			if writefile then
+				writefile(CONFIG_FOLDER .. "/" .. cfgName .. ".json", HttpService:JSONEncode({
+					Keybinds = { ToggleUI = keyName(Keybinds.ToggleUI) },
+					savedAt = os.date("%c"),
+				}))
+			end
+		end)
+		notify("Config Saved", cfgName .. ".json", true)
+	end, Color3.fromRGB(30, 80, 55))
+	addButton(cfg, "Load Config", function()
+		local ok, raw = pcall(function() return readfile(CONFIG_FOLDER .. "/" .. cfgName .. ".json") end)
+		if ok and raw then
+			local ok2, d = pcall(function() return HttpService:JSONDecode(raw) end)
+			if ok2 and type(d) == "table" and type(d.Keybinds) == "table" then
+				if d.Keybinds.ToggleUI then Keybinds.ToggleUI = keyFromName(d.Keybinds.ToggleUI) end
+				notify("Config Loaded", cfgName, true)
+			else
+				notify("Config Error", "Invalid data", false)
+			end
+		else
+			notify("Config Error", "File not found", false)
+		end
+	end)
+	addButton(cfg, "Delete Config", function()
+		pcall(function() delfile(CONFIG_FOLDER .. "/" .. cfgName .. ".json") end)
+		notify("Config", "Deleted: " .. cfgName, true)
+	end)
+
+	local listeningBind = nil
+	local bindLabels = {}
+	local function addKeybindRow(parent, label, bindKey)
+		local row = Instance.new("Frame")
+		row.Size = UDim2.new(1, 0, 0, 34)
+		row.BackgroundColor3 = THEME.element
+		row.BackgroundTransparency = 0.35
+		row.BorderSizePixel = 0
+		row.ZIndex = 9
+		row.Parent = parent
+		corner(row, 6)
+		local lbl = Instance.new("TextLabel")
+		lbl.Size = UDim2.new(1, -114, 1, 0)
+		lbl.Position = UDim2.new(0, 8, 0, 0)
+		lbl.BackgroundTransparency = 1
+		lbl.Text = label
+		lbl.TextColor3 = THEME.text
+		lbl.Font = Enum.Font.GothamMedium
+		lbl.TextSize = 12
+		lbl.TextXAlignment = Enum.TextXAlignment.Left
+		lbl.ZIndex = 10
+		lbl.Parent = row
+		local btn = Instance.new("TextButton")
+		btn.Size = UDim2.new(0, 98, 0, 24)
+		btn.Position = UDim2.new(1, -104, 0.5, -12)
+		btn.BackgroundColor3 = Color3.fromRGB(30, 36, 62)
+		btn.BackgroundTransparency = 0.15
+		btn.Text = keyName(Keybinds[bindKey])
+		btn.TextColor3 = THEME.accent
+		btn.Font = Enum.Font.GothamBold
+		btn.TextSize = 11
+		btn.ZIndex = 11
+		btn.Parent = row
+		corner(btn, 5)
+		bindLabels[bindKey] = btn
+		btn.MouseButton1Click:Connect(function()
+			if listeningBind then return end
+			listeningBind = bindKey
+			btn.Text = "..."
+			local conn
+			conn = UserInputService.InputBegan:Connect(function(input)
+				if input.UserInputType ~= Enum.UserInputType.Keyboard then return end
+				local kc = input.KeyCode
+				if kc == Enum.KeyCode.Escape then
+					Keybinds[bindKey] = Enum.KeyCode.Unknown
+					btn.Text = "None"
+				else
+					Keybinds[bindKey] = kc
+					btn.Text = keyName(kc)
+				end
+				listeningBind = nil
+				if conn then conn:Disconnect() end
+			end)
+		end)
+		return row
+	end
+	local kb = section(PageSettings, "KEYBINDS (PC)")
+	addLabel(kb, "Click a row, then press a key. Esc clears.", 11, THEME.dim)
+	addKeybindRow(kb, "Toggle UI", "ToggleUI")
+	addButton(kb, "Reset Keybinds to Default", function()
+		Keybinds.ToggleUI = Enum.KeyCode.RightShift
+		for k, btn in pairs(bindLabels) do
+			btn.Text = keyName(Keybinds[k])
+		end
+		notify("Keybinds", "Reset to RightShift", true)
+	end, Color3.fromRGB(55, 42, 32))
+end
+
+-- SERVER
+do
+	tabMessages(PageServer, {
+		"<> Script made by KHUB · Kyiel Pambid",
+		"<> Community links and session tools.",
+		"$ Copy Discord / YouTube anytime.",
+		"> Rejoin if the server lags.",
+	})
+	local links = section(PageServer, "LINKS")
+	addButton(links, "Copy Discord Invite", function()
+		pcall(function() if setclipboard then setclipboard(DISCORD) end end)
+		notify("Copied", "Discord", true)
+	end, Color3.fromRGB(48, 68, 160))
+	addButton(links, "Copy YouTube Channel", function()
+		pcall(function() if setclipboard then setclipboard(YOUTUBE) end end)
+		notify("Copied", "YouTube", true)
+	end, Color3.fromRGB(160, 42, 54))
+end
+
+
+-- FLOATING ORB (MOBILE & MINIMIZE TOGGLE)
+local OrbWrap = Instance.new("Frame")
+OrbWrap.Size = UDim2.new(0, 52, 0, 52)
+OrbWrap.Position = UDim2.new(0, 16, 0.5, -26)
+OrbWrap.BackgroundColor3 = Color3.fromRGB(12, 10, 20)
+OrbWrap.BorderSizePixel = 0
+OrbWrap.ClipsDescendants = false
+OrbWrap.Visible = false
+OrbWrap.ZIndex = 50
+OrbWrap.Parent = ScreenGui
+corner(OrbWrap, 26)
+
+local Orb = Instance.new("ImageButton")
+Orb.Size = UDim2.new(1, 0, 1, 0)
+Orb.BackgroundTransparency = 1
+Orb.Image = LOGO_ID
+Orb.ScaleType = Enum.ScaleType.Fit
+Orb.ZIndex = 52
+Orb.Parent = OrbWrap
+corner(Orb, 26)
+attachMegaLogoAura(OrbWrap, Orb, true)
+
+-- SMOOTH SPRING OPEN / CLOSE ANIMATIONS
+local isOpening = false
+local function setVisible(on)
+	if isOpening then return end
+	isOpening = true
+	if on then
+		Main.Visible = true
+		Main.Size = UDim2.new(0, WIN_W * 0.85, 0, WIN_H * 0.85)
+		Main.Position = UDim2.new(0.5, -WIN_W * 0.425, 0.5, -WIN_H * 0.425)
+		TweenService:Create(Main, TweenInfo.new(0.35, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+			Size = UDim2.new(0, WIN_W, 0, WIN_H),
+			Position = UDim2.new(0.5, -WIN_W / 2, 0.5, -WIN_H / 2),
+		}):Play()
+		OrbWrap.Visible = false
+	else
+		local tw = TweenService:Create(Main, TweenInfo.new(0.22, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
+			Size = UDim2.new(0, WIN_W * 0.8, 0, WIN_H * 0.8),
+			Position = UDim2.new(0.5, -WIN_W * 0.4, 0.5, -WIN_H * 0.4),
+		})
+		tw:Play()
+		tw.Completed:Wait()
+		Main.Visible = false
+		OrbWrap.Visible = true
+	end
+	isOpening = false
+end
+
+CloseBtn.MouseButton1Click:Connect(function()
+	createRipple(CloseBtn)
+	setVisible(false)
+end)
+MinBtn.MouseButton1Click:Connect(function()
+	createRipple(MinBtn)
+	setVisible(false)
+end)
+Orb.MouseButton1Click:Connect(function()
+	createRipple(Orb)
+	setVisible(true)
+end)
+
+-- DRAGGABLE ORB
+do
+	local dragging, dragStart, startPos = false, nil, nil
+	Orb.InputBegan:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+			dragging = true
+			dragStart = input.Position
+			startPos = OrbWrap.Position
+			input.Changed:Connect(function()
+				if input.UserInputState == Enum.UserInputState.End then dragging = false end
+			end)
+		end
+	end)
+	UserInputService.InputChanged:Connect(function(input)
+		if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+			local delta = input.Position - dragStart
+			OrbWrap.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+		end
+	end)
+end
+
+-- KEYBOARD TOGGLE
+UserInputService.InputBegan:Connect(function(i, gp)
+	if gp then return end
+	if i.UserInputType ~= Enum.UserInputType.Keyboard then return end
+	local kc = i.KeyCode
+	if (Keybinds.ToggleUI ~= Enum.KeyCode.Unknown and kc == Keybinds.ToggleUI)
+		or kc == Enum.KeyCode.RightControl
+		or kc == Enum.KeyCode.K then
+		setVisible(not Main.Visible)
+	end
+end)
+
+local function playKHUBIntro()
+	local _I,_U,_C,_TI,_Us,_tw,_ts,_UD,_mc,_mf,_ma,_mh,_mx,_mn,_ti,_tr,_EGB,_ESQ,_ESB,_EDO,_EDI,_BgT,_BgC,_BSP,_TC3,_ZI,_TSz=Instance.new,UDim2.new,Color3.fromRGB,TweenInfo.new,UDim2.fromScale,task.wait,task.spawn,UDim.new,math.clamp,math.floor,math.abs,math.huge,math.max,math.min,table.insert,table.remove,Enum.Font.GothamBold,Enum.EasingStyle.Quad,Enum.EasingStyle.Back,Enum.EasingDirection.Out,Enum.EasingDirection.InOut,"BackgroundTransparency","BackgroundColor3","BorderSizePixel","TextColor3","ZIndex","TextSize"
+
+	local Players=game:GetService("Players")
+	local TweenService=game:GetService("TweenService")
+	local Lighting=game:GetService("Lighting")
+	local RunService=game:GetService("RunService")
+	local TextService=game:GetService("TextService")
+	local UserInputService=game:GetService("UserInputService")
+
+	local player=Players.LocalPlayer
+	local playerGui=player:WaitForChild("PlayerGui")
+
+	pcall(function()
+		local old=playerGui:FindFirstChild("KHUBIntro")
+		if old then old:Destroy() end
+	end)
+
+	local screenGui=_I("ScreenGui")
+	screenGui.Name="KHUBIntro"
+	screenGui.IgnoreGuiInset=true
+	screenGui.ResetOnSpawn=false
+	screenGui.ZIndexBehavior=Enum.ZIndexBehavior.Sibling
+	screenGui.DisplayOrder=2000
+	screenGui.Parent=playerGui
+
+	local introSound=nil
+	local blur=nil
+	local skipped=false
+	local skipConn=nil
+	local finished=false
+
+	local SOUND_ID=(_G and _G.__KHUBIntroSoundId and tonumber(_G.__KHUBIntroSoundId)) or 120267378058133
+	local SKIP_SECONDS=10
+
+	local MAIN_COLOR=_C(157,78,221)
+	local GLOW_COLOR=_C(110,40,180)
+	local LIGHT_COLOR=_C(210,140,255)
+	local ACCENT_COLOR=_C(247,215,148)
+	local WHITE=_C(255,255,255)
+	local BLACK=_C(0,0,0)
+
+	local function cleanupAll()
+		if finished then return end
+		finished=true
+		skipped=true
+		pcall(function()
+			if introSound then introSound:Stop(); introSound:Destroy(); introSound=nil end
+		end)
+		pcall(function()
+			if blur then blur:Destroy(); blur=nil end
+		end)
+		pcall(function()
+			if screenGui then screenGui:Destroy(); screenGui=nil end
+		end)
+		pcall(function()
+			if skipConn then skipConn:Disconnect(); skipConn=nil end
+		end)
+		-- kill any leftover KHUBIntro
+		pcall(function()
+			local pg=player:FindFirstChild("PlayerGui")
+			if pg then
+				local o=pg:FindFirstChild("KHUBIntro")
+				if o then o:Destroy() end
+			end
+		end)
+	end
+
+	local function requestSkip()
+		if skipped then return end
+		skipped=true
+		cleanupAll()
+	end
+
+	local function waitOrSkip(sec)
+		local t0=os.clock()
+		while not skipped and (os.clock()-t0)<sec do
+			task.wait(0.03)
+		end
+		return skipped
+	end
+
+	-- hard safety: never let intro hang more than 18s
+	task.delay(8, function()
+		if not finished then
+			warn("[KHUB] Intro timeout 8s — force cleanup")
+			cleanupAll()
+		end
+	end)
+
+	-- SKIP BUTTON
+	do
+		local skipBtn=_I("TextButton")
+		skipBtn.Name="SkipBtn"
+		skipBtn.Size=_U(0,100,0,36)
+		skipBtn.Position=_U(1,-118,0,20)
+		skipBtn.BackgroundColor3=_C(20,16,32)
+		skipBtn.BackgroundTransparency=0.1
+		skipBtn.BorderSizePixel=0
+		skipBtn.Text="SKIP  ›"
+		skipBtn.Font=Enum.Font.GothamBold
+		skipBtn.TextSize=14
+		skipBtn.TextColor3=_C(245,247,255)
+		skipBtn.ZIndex=100
+		skipBtn.Parent=screenGui
+		local sc=_I("UICorner")
+		sc.CornerRadius=_UD(0,8)
+		sc.Parent=skipBtn
+		local ss=_I("UIStroke")
+		ss.Color=MAIN_COLOR
+		ss.Thickness=1.5
+		ss.Transparency=0.2
+		ss.Parent=skipBtn
+		skipBtn.MouseButton1Click:Connect(function()
+			requestSkip()
+		end)
+		skipConn=UserInputService.InputBegan:Connect(function(input,gp)
+			if gp then return end
+			if input.KeyCode==Enum.KeyCode.Space or input.KeyCode==Enum.KeyCode.Return then
+				requestSkip()
+			end
+		end)
+	end
+
+	blur=_I("BlurEffect")
+	blur.Size=0
+	blur.Parent=Lighting
+
+	local overlay=_I("Frame")
+	overlay.Size=_Us(1,1)
+	overlay[_BgC]=_C(0,0,0)
+	overlay[_BgT]=0.3
+	overlay[_BSP]=0
+	overlay[_ZI]=1
+	overlay.Parent=screenGui
+
+	local darkOverlay=_I("Frame")
+	darkOverlay.Size=_Us(1,1)
+	darkOverlay[_BgC]=_C(8,3,18)
+	darkOverlay[_BgT]=0.5
+	darkOverlay[_BSP]=0
+	darkOverlay[_ZI]=1
+	darkOverlay.Parent=screenGui
+
+	local vignette=_I("ImageLabel")
+	vignette.Size=_Us(1,1)
+	vignette[_BgT]=1
+	vignette.Image="rbxassetid://195611797"
+	vignette.ImageColor3=BLACK
+	vignette.ImageTransparency=0.35
+	vignette[_ZI]=2
+	vignette.Parent=screenGui
+
+	local container=_I("Frame")
+	container.Size=_U(0,900,0,200)
+	container.AnchorPoint=Vector2.new(0.5,0.5)
+	container.Position=_U(0.5,0,0.5,0)
+	container[_BgT]=1
+	container[_BSP]=0
+	container.ClipsDescendants=false
+	container[_ZI]=5
+	container.Parent=screenGui
+
+	local particleContainer=_I("Frame")
+	particleContainer.Size=_Us(1,1)
+	particleContainer[_BgT]=1
+	particleContainer[_ZI]=8
+	particleContainer.Parent=screenGui
+
+	local function createParticle()
+		if skipped or not screenGui then return end
+		local p=_I("Frame")
+		p.Size=_U(0,math.random(3,6),0,math.random(3,6))
+		p.Position=_U(0.5+math.random(-30,30)/100,0,0.5+math.random(-20,20)/100,0)
+		p[_BgC]=math.random()<0.5 and MAIN_COLOR or LIGHT_COLOR
+		p[_BgT]=0
+		p[_BSP]=0
+		p[_ZI]=8
+		p.Parent=particleContainer
+		local _corner=_I("UICorner")
+		_corner.CornerRadius=_UD(1,0)
+		_corner.Parent=p
+		local floatDur=1.5+math.random()*1.5
+		local tween=TweenService:Create(p,_TI(floatDur,Enum.EasingStyle.Sine,Enum.EasingDirection.Out),{
+			Position=_U(0.5+math.random(-40,40)/100,0,0.5+math.random(-40,20)/100,0),
+			BackgroundTransparency=1,
+			Size=_U(0,0,0,0)
+		})
+		tween:Play()
+		tween.Completed:Connect(function() p:Destroy() end)
+	end
+
+	local leftLabel=_I("TextLabel")
+	leftLabel.Size=_U(0,550,1,0)
+	leftLabel.AnchorPoint=Vector2.new(1,0.5)
+	leftLabel.Position=_U(0.5,-12,0.5,0)
+	leftLabel[_BgT]=1
+	leftLabel.Text="KHUB"
+	leftLabel[_TC3]=WHITE
+	leftLabel.TextStrokeColor3=BLACK
+	leftLabel.TextStrokeTransparency=0
+	leftLabel.Font=Enum.Font.GothamBlack
+	leftLabel[_TSz]=92
+	leftLabel.TextXAlignment=Enum.TextXAlignment.Right
+	leftLabel.TextTransparency=1
+	leftLabel[_ZI]=5
+	leftLabel.Visible=true
+	leftLabel.Parent=container
+
+	local rightLabel=_I("TextLabel")
+	rightLabel.Size=_U(0,450,1,0)
+	rightLabel.AnchorPoint=Vector2.new(0,0.5)
+	rightLabel.Position=_U(0.5,-12,0.5,0)
+	rightLabel[_BgT]=1
+	rightLabel.Text="TBD"
+	rightLabel[_TC3]=MAIN_COLOR
+	rightLabel.TextStrokeColor3=BLACK
+	rightLabel.TextStrokeTransparency=0
+	rightLabel.Font=Enum.Font.GothamBlack
+	rightLabel[_TSz]=92
+	rightLabel.TextXAlignment=Enum.TextXAlignment.Left
+	rightLabel.TextTransparency=1
+	rightLabel[_ZI]=5
+	rightLabel.Visible=true
+	rightLabel.Parent=container
+
+	local mainLabel=_I("TextLabel")
+	mainLabel.Size=_U(1,0,1,0)
+	mainLabel.AnchorPoint=Vector2.new(0.5,0.5)
+	mainLabel.Position=_U(0.5,0,0.5,0)
+	mainLabel[_BgT]=1
+	mainLabel.Text="Khub TBD"
+	mainLabel[_TC3]=WHITE
+	mainLabel.TextStrokeColor3=BLACK
+	mainLabel.TextStrokeTransparency=0
+	mainLabel.Font=Enum.Font.GothamBlack
+	mainLabel[_TSz]=88
+	mainLabel.TextXAlignment=Enum.TextXAlignment.Center
+	mainLabel.TextTransparency=1
+	mainLabel[_ZI]=5
+	mainLabel.Parent=container
+
+	local lightBeam=_I("Frame")
+	lightBeam.Size=_U(0,0,1.1,0)
+	lightBeam.AnchorPoint=Vector2.new(0,0.5)
+	lightBeam.Position=_U(0,-20,0.5,0)
+	lightBeam[_BgC]=MAIN_COLOR
+	lightBeam[_BgT]=0.5
+	lightBeam[_BSP]=0
+	lightBeam[_ZI]=6
+	lightBeam.Parent=container
+
+	local beamGlow=_I("Frame")
+	beamGlow.Size=_U(0,0,1.3,0)
+	beamGlow.AnchorPoint=Vector2.new(0,0.5)
+	beamGlow.Position=_U(0,-20,0.5,0)
+	beamGlow[_BgC]=GLOW_COLOR
+	beamGlow[_BgT]=0.7
+	beamGlow[_BSP]=0
+	beamGlow[_ZI]=5
+	beamGlow.Parent=container
+
+	local beamSparkles=_I("Frame")
+	beamSparkles.Size=_U(0,0,1,0)
+	beamSparkles.AnchorPoint=Vector2.new(0,0.5)
+	beamSparkles.Position=_U(0,-20,0.5,0)
+	beamSparkles[_BgC]=WHITE
+	beamSparkles[_BgT]=0.8
+	beamSparkles[_BSP]=0
+	beamSparkles[_ZI]=7
+	beamSparkles.Parent=container
+
+	local subLabel=_I("TextLabel")
+	subLabel.Size=_U(1,0,0,45)
+	subLabel.AnchorPoint=Vector2.new(0.5,0)
+	subLabel.Position=_U(0.5,0,0.5,85)
+	subLabel[_BgT]=1
+	subLabel.Text="SCRIPT HUB"
+	subLabel[_TC3]=MAIN_COLOR
+	subLabel.Font=Enum.Font.GothamBold
+	subLabel[_TSz]=16
+	subLabel.TextXAlignment=Enum.TextXAlignment.Center
+	subLabel.TextTransparency=1
+	subLabel[_ZI]=5
+	subLabel.Parent=screenGui
+
+	local subLabel2=_I("TextLabel")
+	subLabel2.Size=_U(1,0,0,28)
+	subLabel2.AnchorPoint=Vector2.new(0.5,0)
+	subLabel2.Position=_U(0.5,0,0.5,120)
+	subLabel2[_BgT]=1
+	subLabel2.Text="BY KYIEL PAMBID"
+	subLabel2[_TC3]=ACCENT_COLOR
+	subLabel2.Font=Enum.Font.GothamBold
+	subLabel2[_TSz]=13
+	subLabel2.TextXAlignment=Enum.TextXAlignment.Center
+	subLabel2.TextTransparency=1
+	subLabel2[_ZI]=5
+	subLabel2.Parent=screenGui
+
+	local accentBar=_I("Frame")
+	accentBar.Size=_U(0,0,0,3)
+	accentBar.AnchorPoint=Vector2.new(0.5,0)
+	accentBar.Position=_U(0.5,0,0.5,78)
+	accentBar[_BgC]=MAIN_COLOR
+	accentBar[_BgT]=0
+	accentBar[_BSP]=0
+	accentBar[_ZI]=5
+	accentBar.Parent=screenGui
+	local _accentCorner=_I("UICorner")
+	_accentCorner.CornerRadius=_UD(0,3)
+	_accentCorner.Parent=accentBar
+
+	local flashFrame=_I("Frame")
+	flashFrame.Size=_Us(1,1)
+	flashFrame[_BgC]=WHITE
+	flashFrame[_BgT]=1
+	flashFrame[_BSP]=0
+	flashFrame[_ZI]=10
+	flashFrame.Parent=screenGui
+
+	local glitchContainer=_I("Frame")
+	glitchContainer.Size=_U(1,0,1,0)
+	glitchContainer[_BgT]=1
+	glitchContainer[_ZI]=6
+	glitchContainer.Parent=screenGui
+
+	local dripContainer=_I("Frame")
+	dripContainer.Size=_U(1,0,1,0)
+	dripContainer[_BgT]=1
+	dripContainer[_ZI]=7
+	dripContainer.Parent=screenGui
+
+	local function doFlash(color,alpha,duration)
+		if skipped or not screenGui then return end
+		flashFrame[_BgC]=color or WHITE
+		flashFrame[_BgT]=1-(alpha or 0.85)
+		task.delay(duration or 0.06,function()
+			if skipped or not screenGui then return end
+			pcall(function()
+				TweenService:Create(flashFrame,_TI(0.1,_ESQ),{BackgroundTransparency=1}):Play()
+			end)
+		end)
+	end
+
+	local function runLightBeam()
+		if skipped or not screenGui then return end
+		lightBeam.Size=_U(0,50,1.1,0)
+		beamGlow.Size=_U(0,75,1.3,0)
+		beamSparkles.Size=_U(0,50,1,0)
+		lightBeam[_BgT]=0.35
+		beamGlow[_BgT]=0.55
+		beamSparkles[_BgT]=0.75
+		local beamTween=TweenService:Create(lightBeam,_TI(0.8,_ESQ,_EDI),{Position=_U(1,20,0.5,0)})
+		beamTween:Play()
+		TweenService:Create(beamGlow,_TI(0.8,_ESQ,_EDI),{Position=_U(1,20,0.5,0)}):Play()
+		TweenService:Create(beamSparkles,_TI(0.8,_ESQ,_EDI),{Position=_U(1,20,0.5,0)}):Play()
+		local pulseCount=0
+		local pulseConnection
+		pulseConnection=RunService.Heartbeat:Connect(function()
+			if skipped then
+				if pulseConnection then pulseConnection:Disconnect() end
+				return
+			end
+			pulseCount=pulseCount+1
+			if pulseCount%3==0 then
+				local p=0.3+math.sin(pulseCount*0.5)*0.15
+				lightBeam[_BgT]=0.3-(p*0.2)
+				beamGlow[_BgT]=0.5-(p*0.1)
+				beamSparkles[_BgT]=0.7-(p*0.15)
+			end
+		end)
+		-- don't block forever
+		local t0=os.clock()
+		while beamTween.PlaybackState==Enum.PlaybackState.Playing and not skipped and (os.clock()-t0)<1.2 do
+			task.wait(0.03)
+		end
+		if pulseConnection then pulseConnection:Disconnect() end
+		if skipped or not screenGui then return end
+		pcall(function()
+			TweenService:Create(lightBeam,_TI(0.25),{BackgroundTransparency=1,Size=_U(0,0,1.1,0)}):Play()
+			TweenService:Create(beamGlow,_TI(0.25),{BackgroundTransparency=1,Size=_U(0,0,1.3,0)}):Play()
+			TweenService:Create(beamSparkles,_TI(0.25),{BackgroundTransparency=1,Size=_U(0,0,1,0)}):Play()
+		end)
+	end
+
+	local glitchChars={"!","#","%","/","[","]","░","▒","▓","—","=","*","^","~","¦","¤"}
+
+	local function glitchText(lbl,original)
+		if skipped or not screenGui then return end
+		for i=1,4 do
+			if skipped then return end
+			local s=""
+			for c in original:gmatch(".") do
+				s=s..(math.random()<0.35 and glitchChars[math.random(#glitchChars)] or c)
+			end
+			lbl.Text=s
+			_tw(0.03)
+		end
+		if not skipped then lbl.Text=original end
+	end
+
+	local function addGlitchBar()
+		if skipped or not screenGui then return end
+		local bar=_I("Frame")
+		bar.Size=_U(1,0,0,math.random(2,12))
+		bar.Position=_U(0,0,math.random(10,90)/100,0)
+		bar[_BgC]=MAIN_COLOR
+		bar[_BgT]=math.random(45,70)/100
+		bar[_BSP]=0
+		bar[_ZI]=6
+		bar.Parent=glitchContainer
+		task.delay(0.1,function()
+			if bar and bar.Parent then
+				TweenService:Create(bar,_TI(0.1),{BackgroundTransparency=1}):Play()
+				task.delay(0.1,function() bar:Destroy() end)
+			end
+		end)
+	end
+
+	local function shakeScreen(intensity,duration)
+		if skipped or not screenGui then return end
+		local startTime=tick()
+		local steps=math.ceil(duration/0.05)
+		for _=1,steps do
+			if skipped then return end
+			local elapsed=tick()-startTime
+			local cur=intensity*(1-(elapsed/duration))
+			if cur<1 then cur=1 end
+			local ox=math.random(-_mf(cur),_mf(cur))
+			local oy=math.random(-_mf(cur*0.5),_mf(cur*0.5))
+			leftLabel.Position=_U(0.5,-12+ox,0.5,oy)
+			rightLabel.Position=_U(0.5,12+ox,0.5,oy)
+			_tw(0.05)
+		end
+		if skipped or not screenGui then return end
+		pcall(function()
+			TweenService:Create(leftLabel,_TI(0.05),{Position=_U(0.5,-12,0.5,0)}):Play()
+			TweenService:Create(rightLabel,_TI(0.05),{Position=_U(0.5,12,0.5,0)}):Play()
+		end)
+	end
+
+	local function setupAudio()
+		introSound=_I("Sound")
+		introSound.SoundId="rbxassetid://"..SOUND_ID
+		introSound.Volume=0.7
+		introSound.PlayOnRemove=false
+		introSound.Looped=false
+		introSound.Parent=screenGui
+		-- don't block forever on Loaded
+		local loaded=false
+		pcall(function()
+			if introSound.IsLoaded then
+				loaded=true
+			else
+				local conn
+				conn=introSound.Loaded:Connect(function()
+					loaded=true
+					if conn then conn:Disconnect() end
+				end)
+				local t0=os.clock()
+				while not loaded and not skipped and (os.clock()-t0)<3 do
+					task.wait(0.05)
+				end
+				if conn then pcall(function() conn:Disconnect() end) end
+			end
+		end)
+		if skipped then return end
+		pcall(function()
+			introSound:Play()
+			introSound.TimePosition=SKIP_SECONDS
+		end)
+		return introSound
+	end
+
+	local function fadeOutAudio(duration)
+		if not introSound then return end
+		local startVolume=introSound.Volume
+		local steps=10
+		for i=1,steps do
+			if skipped or not introSound then break end
+			introSound.Volume=startVolume*(1-(i/steps))
+			_tw(duration/steps)
+		end
+		if introSound then
+			introSound.Volume=0
+			pcall(function() introSound:Stop() end)
+		end
+	end
+
+	local function stopAudio()
+		if introSound then
+			pcall(function() introSound:Stop() end)
+			pcall(function() introSound:Destroy() end)
+			introSound=nil
+		end
+	end
+
+	local activeDrips=0
+
+	local function createDrip(startX,startY,width,height,duration,delay)
+		if skipped then return end
+		_tw(delay)
+		if skipped or not screenGui then return end
+		activeDrips=activeDrips+1
+		local drip=_I("Frame")
+		drip.Size=_U(0,width,0,height)
+		drip.Position=_U(0.5,startX,0.5,startY)
+		drip[_BgC]=MAIN_COLOR
+		drip[_BgT]=0.25
+		drip[_BSP]=0
+		drip[_ZI]=7
+		drip.Parent=dripContainer
+		local _dripCorner=_I("UICorner")
+		_dripCorner.CornerRadius=_UD(0,4)
+		_dripCorner.Parent=drip
+		local stretch=TweenService:Create(drip,_TI(duration*0.35),{Size=_U(0,width,0,height+22),BackgroundTransparency=0.1})
+		stretch:Play()
+		_tw(duration*0.35)
+		if skipped then
+			pcall(function() drip:Destroy() end)
+			activeDrips=math.max(0,activeDrips-1)
+			return
+		end
+		local fall=TweenService:Create(drip,_TI(duration*0.65,_ESQ,Enum.EasingDirection.In),{
+			Position=_U(0.5,startX+math.random(-3,3),0.5,startY+90),
+			BackgroundTransparency=1
+		})
+		fall:Play()
+		fall.Completed:Connect(function()
+			drip:Destroy()
+			activeDrips=math.max(0,activeDrips-1)
+		end)
+	end
+
+	local function startDripping()
+		if skipped or not screenGui then return end
+		local fullText="KHUB"
+		local font=Enum.Font.GothamBlack
+		local textSize=92
+		local textBoundsFull=TextService:GetTextSize(fullText,textSize,font,Vector2.new(_mh,_mh))
+		local textHeight=textBoundsFull.Y
+		local delayCounter=0
+		local drips={}
+		for i=1,#fullText do
+			local char=fullText:sub(i,i)
+			local charBounds=TextService:GetTextSize(char,textSize,font,Vector2.new(_mh,_mh))
+			local charWidth=charBounds.X
+			local precedingWidth=0
+			if i>1 then
+				precedingWidth=TextService:GetTextSize(fullText:sub(1,i-1),textSize,font,Vector2.new(_mh,_mh)).X
+			end
+			local totalTextWidth=textBoundsFull.X
+			local charCenterX=-totalTextWidth/2+precedingWidth+charWidth/2
+			local startY=textHeight/2+3
+			local dripWidth=_mc(_mf(charWidth*0.35),3,7)
+			local dripHeight=math.random(4,7)
+			local dur=0.5+math.random()*0.2
+			local del=delayCounter*0.07
+			_ti(drips,{
+				startX=charCenterX+math.random(-2,2),
+				startY=startY+math.random(0,4),
+				width=dripWidth,
+				height=dripHeight,
+				duration=dur,
+				delay=del
+			})
+			delayCounter=delayCounter+1
+		end
+		for _,d in ipairs(drips) do
+			if skipped then break end
+			createDrip(d.startX,d.startY,d.width,d.height,d.duration,d.delay)
+		end
+	end
+
+	-- MAIN SEQUENCE
+	setupAudio()
+	if skipped then cleanupAll(); return end
+
+	leftLabel.Position=_U(-0.9,0,-0.6,0)
+	rightLabel.Position=_U(1.9,0,1.6,0)
+	leftLabel.Rotation=-30
+	rightLabel.Rotation=30
+
+	pcall(function()
+		TweenService:Create(blur,_TI(0.7),{Size=18}):Play()
+		TweenService:Create(overlay,_TI(0.7),{BackgroundTransparency=0.2}):Play()
+		TweenService:Create(darkOverlay,_TI(0.7),{BackgroundTransparency=0.4}):Play()
+	end)
+
+	if waitOrSkip(0.35) then cleanupAll(); return end
+
+	TweenService:Create(leftLabel,_TI(0.45),{TextTransparency=0}):Play()
+	TweenService:Create(rightLabel,_TI(0.45),{TextTransparency=0}):Play()
+	TweenService:Create(leftLabel,_TI(0.55,Enum.EasingStyle.Elastic,_EDO),{Position=_U(0.5,-240,0.5,-80),Rotation=-15}):Play()
+	TweenService:Create(rightLabel,_TI(0.55,Enum.EasingStyle.Elastic,_EDO),{Position=_U(0.5,140,0.5,80),Rotation=15}):Play()
+
+	if waitOrSkip(0.45) then cleanupAll(); return end
+
+	local smooth=_TI(0.4,_ESQ,_EDO)
+	TweenService:Create(leftLabel,smooth,{Position=_U(0.5,-180,0.5,-50),Rotation=-8}):Play()
+	TweenService:Create(rightLabel,smooth,{Position=_U(0.5,90,0.5,50),Rotation=8}):Play()
+
+	if waitOrSkip(0.35) then cleanupAll(); return end
+
+	TweenService:Create(leftLabel,smooth,{Position=_U(0.5,-120,0.5,-25),Rotation=-4}):Play()
+	TweenService:Create(rightLabel,smooth,{Position=_U(0.5,40,0.5,25),Rotation=4}):Play()
+
+	if waitOrSkip(0.3) then cleanupAll(); return end
+
+	TweenService:Create(leftLabel,smooth,{Position=_U(0.5,-60,0.5,-10),Rotation=-2}):Play()
+	TweenService:Create(rightLabel,smooth,{Position=_U(0.5,-10,0.5,10),Rotation=2}):Play()
+
+	if waitOrSkip(0.25) then cleanupAll(); return end
+
+	_ts(function()
+		for i=1,30 do
+			if skipped then break end
+			createParticle()
+			_tw(0.05)
+		end
+	end)
+
+	local glitchEnd=tick()+1.1
+	while tick()<glitchEnd do
+		if skipped then cleanupAll(); return end
+		local ox=math.random(-20,20)
+		local oy=math.random(-10,10)
+		leftLabel.Position=_U(0.5,-60+ox,0.5,-10+oy)
+		rightLabel.Position=_U(0.5,-10+ox,0.5,10+oy)
+		if math.random()<0.35 then _ts(glitchText,leftLabel,"KHUB") end
+		if math.random()<0.35 then _ts(glitchText,rightLabel,"TBD") end
+		if math.random()<0.4 then addGlitchBar() end
+		if math.random()<0.1 then doFlash(MAIN_COLOR,0.2,0.03) end
+		_tw(0.045)
+	end
+
+	if skipped then cleanupAll(); return end
+
+	leftLabel.Visible=false
+	rightLabel.Visible=false
+	mainLabel.TextTransparency=0
+
+	doFlash(MAIN_COLOR,0.5,0.05)
+	if waitOrSkip(0.08) then cleanupAll(); return end
+
+	TweenService:Create(mainLabel,_TI(0.15,_ESB,Enum.EasingDirection.In),{TextSize=92}):Play()
+	if waitOrSkip(0.15) then cleanupAll(); return end
+
+	TweenService:Create(mainLabel,_TI(0.1),{TextSize=88}):Play()
+	doFlash(WHITE,0.95,0.05)
+	if waitOrSkip(0.02) then cleanupAll(); return end
+	doFlash(MAIN_COLOR,0.65,0.08)
+
+	_ts(shakeScreen,10,0.25)
+	_ts(runLightBeam)
+
+	TweenService:Create(mainLabel,_TI(0.4,_ESQ),{TextColor3=MAIN_COLOR}):Play()
+	TweenService:Create(accentBar,_TI(0.5,Enum.EasingStyle.Elastic,_EDO),{Size=_U(0,420,0,3)}):Play()
+
+	if waitOrSkip(0.2) then cleanupAll(); return end
+
+	TweenService:Create(subLabel,_TI(0.4),{TextTransparency=0.05}):Play()
+	TweenService:Create(subLabel2,_TI(0.4),{TextTransparency=0.15}):Play()
+	if waitOrSkip(0.1) then cleanupAll(); return end
+
+	doFlash(WHITE,0.3,0.04)
+	TweenService:Create(subLabel,_TI(0.2),{TextSize=17}):Play()
+	if waitOrSkip(0.2) then cleanupAll(); return end
+	TweenService:Create(subLabel,_TI(0.2),{TextSize=16}):Play()
+
+	_ts(function()
+		for i=1,40 do
+			if skipped then break end
+			createParticle()
+			_tw(0.08)
+		end
+	end)
+
+	if waitOrSkip(0.9) then cleanupAll(); return end
+
+	startDripping()
+	-- max 2s for drips so it never sticks
+	local dripT0=os.clock()
+	while activeDrips>0 and not skipped and (os.clock()-dripT0)<2 do
+		_tw(0.1)
+	end
+
+	if waitOrSkip(0.45) then cleanupAll(); return end
+	fadeOutAudio(1.0)
+
+	if skipped then cleanupAll(); return end
+
+	local fadeInfo=_TI(0.85,_ESQ,Enum.EasingDirection.In)
+	pcall(function()
+		TweenService:Create(mainLabel,fadeInfo,{TextTransparency=1}):Play()
+		TweenService:Create(subLabel,fadeInfo,{TextTransparency=1}):Play()
+		TweenService:Create(subLabel2,fadeInfo,{TextTransparency=1}):Play()
+		TweenService:Create(accentBar,fadeInfo,{BackgroundTransparency=1}):Play()
+		TweenService:Create(overlay,fadeInfo,{BackgroundTransparency=1}):Play()
+		TweenService:Create(darkOverlay,fadeInfo,{BackgroundTransparency=1}):Play()
+		if blur then TweenService:Create(blur,_TI(0.85),{Size=0}):Play() end
+		TweenService:Create(dripContainer,fadeInfo,{BackgroundTransparency=1}):Play()
+	end)
+
+	if waitOrSkip(0.9) then cleanupAll(); return end
+	stopAudio()
+	cleanupAll()
+end
+
+
+-- ============================================================
+-- START
+-- ============================================================
+-- Open UI immediately so script never looks "stuck"
+switchTab("Welcome")
+setVisible(true)
+print("[KHUB] Timebomb Premium UI ready")
+
+-- Intro runs after UI is already open (can skip anytime)
+task.spawn(function()
+	-- hide main briefly while intro plays
+	pcall(function() Main.Visible = false end)
+	local ok, err = pcall(playKHUBIntro)
+	if not ok then
+		warn("[KHUB UI] Intro error: ", err)
+	end
+	-- force kill leftover intro gui + audio
+	pcall(function()
+		local pg = player:FindFirstChild("PlayerGui")
+		if pg then
+			local oldIntro = pg:FindFirstChild("KHUBIntro")
+			if oldIntro then oldIntro:Destroy() end
+		end
+	end)
+	pcall(function()
+		for _, s in ipairs(game:GetService("SoundService"):GetDescendants()) do
+			if s:IsA("Sound") and tostring(s.SoundId):find("120267378058133") then
+				s:Stop()
+				s:Destroy()
+			end
+		end
+	end)
+	setVisible(true)
+	print("[KHUB] Timebomb Premium loaded · Toggle: RightShift / RightCtrl / K")
+end)
+
+-- absolute safety: if intro still exists after 12s, destroy it
+task.delay(12, function()
+	pcall(function()
+		local pg = player:FindFirstChild("PlayerGui")
+		if pg then
+			local oldIntro = pg:FindFirstChild("KHUBIntro")
+			if oldIntro then
+				oldIntro:Destroy()
+				warn("[KHUB] Intro force-removed after 12s")
+			end
+		end
+	end)
+	pcall(function() setVisible(true) end)
+end)
