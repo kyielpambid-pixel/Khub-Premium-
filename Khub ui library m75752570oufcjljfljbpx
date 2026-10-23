@@ -992,6 +992,10 @@ local function createTab(id, label, order, iconName)
 	txt.ZIndex = 9
 	txt.Parent = btn
 	tabButtons[id] = btn
+	-- keep Welcome / Config above everything; Server near bottom
+	if tabButtons.Welcome then tabButtons.Welcome.LayoutOrder = 1 end
+	if tabButtons.Config then tabButtons.Config.LayoutOrder = 2 end
+	if tabButtons.Server then tabButtons.Server.LayoutOrder = 90 end
 	local page = Instance.new("ScrollingFrame")
 	page.Name = id
 	page.Size = UDim2.new(1, 0, 1, 0)
