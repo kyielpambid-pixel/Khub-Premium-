@@ -1,13 +1,95 @@
 --==================================================
 -- KHUB UI LIBRARY
 --==================================================
--- Premium single file Roblox UI library.
--- Plain purple visual identity | PC + Mobile.
--- Author: Kyiel Pambid (KHUB)
--- Logo : rbxassetid://116838166946511
+-- Author : Kyiel Pambid (KHUB)
+-- Logo   : rbxassetid://116838166946511
+-- Discord: https://discord.gg/CTqBhzTGHV
+-- YouTube: https://www.youtube.com/@kyielpambid
 --
--- Legacy API : Library.CreateLib("KHUB", "Purple")
--- Modern API : Library:CreateWindow({ Title = "KHUB" })
+-- LOAD:
+--   loadstring(game:HttpGet("YOUR_RAW_GITHUB_URL"))()
+--   local Library = getgenv().KHUB_UI_LIBRARY or getgenv().CM_UI_LIBRARY
+--
+-- ==================================================
+-- HOW TO USE (for humans + AI)
+-- ==================================================
+--
+-- 1) CREATE WINDOW
+--    local Window = Library:CreateWindow({
+--        Title = "Game Name",
+--        Subtitle = "KHUB",
+--        -- SkipIntro = true,  -- optional
+--    })
+--
+-- 2) ADD TAB (with icon)
+--    Icons examples: home, settings, user, sword, zap, eye, star,
+--                    tools, info, save, server, heart, misc, speed
+--    local Main = Window:AddTab({ Title = "Main", Icon = "zap" })
+--
+-- 3) INSTRUCTIONS BOX (one box per tab · colored lines)
+--    Prefixes:
+--      "<> text"  = green
+--      "$ text"   = violet
+--      "> text"   = blue
+--      plain text = green
+--    Main:AddMessages({
+--        "<> Script made by KHUB · Kyiel Pambid",
+--        "<> How it works: enable the toggles you need.",
+--        "$ Report bugs on Discord.",
+--    })
+--
+-- 4) SECTION + CONTROLS
+--    local sec = Main:NewSection("Farm")
+--
+--    sec:AddToggle("AutoFarm", {
+--        Title = "Auto Farm",
+--        Description = "Optional desc",
+--        Default = false,
+--        -- Notify = false,  -- hide side toast
+--        Callback = function(value) end,
+--    })
+--
+--    sec:AddSlider("WalkSpeed", {
+--        Title = "Walk Speed",
+--        Min = 16, Max = 120, Default = 28, Rounding = 0,
+--        Callback = function(value) end,
+--    })
+--
+--    sec:AddDropdown("Zone", {
+--        Title = "Select Zone",
+--        Values = { "A", "B", "C" },
+--        Default = "A",
+--        Callback = function(option) end,
+--    })
+--
+--    sec:AddButton({
+--        Title = "Do Something",
+--        Description = "Optional",
+--        Callback = function() end,
+--    })
+--
+--    sec:AddInput("Name", {
+--        Title = "Config name",
+--        Placeholder = "default",
+--        Default = "default",
+--        Callback = function(text) end,
+--    })
+--
+--    sec:AddLabel({ Title = "Info text" })
+--    sec:AddParagraph({ Title = "Title", Content = "Body text" })
+--
+-- 5) SIDE TOAST (manual)
+--    Library:Notify({ Title = "KHUB", Content = "Hello", Duration = 3 })
+--    -- Auto toasts fire on Toggle / Button / Dropdown clicks (CM Hub style)
+--
+-- 6) INTRO
+--    Plays automatically before UI (KHUB PANEL).
+--    SkipIntro = true on CreateWindow to disable.
+--
+-- 7) THEME
+--    Default is Purple (violet). Settings tab has theme picker.
+--
+-- Legacy: Library.CreateLib("Title", "Purple")
 --==================================================
 
 --==================================================
@@ -8611,7 +8693,7 @@ end
 for _, env in ipairs(GetSharedEnvironments()) do
 	rawset(env, "KHUB_UI_LIBRARY", Library)
 	-- Alias so older load patterns still work
-	rawset(env, "KHUB_UI_LIBRARY", Library)
+	rawset(env, "CM_UI_LIBRARY", Library)
 	rawset(env, "KHUB", Library)
 end
 
