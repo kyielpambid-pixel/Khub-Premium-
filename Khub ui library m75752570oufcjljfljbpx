@@ -5794,16 +5794,17 @@ local function CreateTab(window, config)
 
 	tab.AddSection = tab.NewSection
 
-	-- Colored instruction messages (old KHUB UI style)
+	-- One instruction box per tab (colored lines inside)
 	--   "<> text"  = green
 	--   "$ text"   = violet
 	--   "> text"   = blue
 	--   plain text = green
+	-- Calling again replaces the box (no stacking).
 	function tab:AddMessages(lines)
 		if typeof(lines) == "string" then
 			lines = { lines }
 		end
-		if typeof(lines) ~= "table" then
+		if typeof(lines) ~= "table" or #lines == 0 then
 			return self
 		end
 
@@ -5811,21 +5812,46 @@ local function CreateTab(window, config)
 			green  = Color3.fromRGB(95, 235, 165),
 			violet = Color3.fromRGB(175, 110, 255),
 			blue   = Color3.fromRGB(100, 180, 255),
-			dim    = Color3.fromRGB(140, 150, 190),
 		}
 
-		local wrap = New("Frame", {
+		-- remove old box if any (no duplicate)
+		pcall(function()
+			local old = page:FindFirstChild("KHUBMessages")
+			if old then old:Destroy() end
+		end)
+
+		local box = New("Frame", {
 			Name = "KHUBMessages",
 			Parent = page,
-			BackgroundTransparency = 1,
+			BackgroundColor3 = Color3.fromRGB(14, 18, 32),
+			BackgroundTransparency = 0.2,
 			BorderSizePixel = 0,
 			Size = UDim2.new(1, 0, 0, 0),
 			AutomaticSize = Enum.AutomaticSize.Y,
 			LayoutOrder = -100,
 			ZIndex = 5,
 		})
-		ListLayout(wrap, 6)
-		Padding(wrap, 0, 4, 0, 2)
+		Corner(box, 10)
+		New("UIStroke", {
+			Parent = box,
+			Color = COLORS.green,
+			Thickness = 1,
+			Transparency = 0.4,
+		})
+		Padding(box, 12, 12, 14, 12)
+		ListLayout(box, 5)
+
+		-- left green accent strip
+		local bar = New("Frame", {
+			Name = "AccentBar",
+			Parent = box,
+			BackgroundColor3 = COLORS.green,
+			BorderSizePixel = 0,
+			Size = UDim2.new(0, 3, 1, 0),
+			Position = UDim2.fromOffset(0, 0),
+			ZIndex = 6,
+		})
+		Corner(bar, 2)
 
 		for i, raw in ipairs(lines) do
 			local text = tostring(raw or "")
@@ -5843,43 +5869,11 @@ local function CreateTab(window, config)
 				body = text:sub(2):gsub("^%s+", "")
 			end
 
-			local row = New("Frame", {
-				Name = "Msg" .. i,
-				Parent = wrap,
-				BackgroundColor3 = Color3.fromRGB(14, 18, 32),
-				BackgroundTransparency = 0.25,
-				BorderSizePixel = 0,
-				Size = UDim2.new(1, 0, 0, 0),
-				AutomaticSize = Enum.AutomaticSize.Y,
-				LayoutOrder = i,
-				ZIndex = 6,
-			})
-			Corner(row, 8)
-			local st = New("UIStroke", {
-				Parent = row,
-				Color = color,
-				Thickness = 1,
-				Transparency = 0.35,
-			})
-			Padding(row, 10, 10, 10, 10)
-
-			local bar = New("Frame", {
-				Name = "Bar",
-				Parent = row,
-				BackgroundColor3 = color,
-				BorderSizePixel = 0,
-				Size = UDim2.new(0, 3, 1, 0),
-				Position = UDim2.fromOffset(0, 0),
-				ZIndex = 7,
-			})
-			Corner(bar, 2)
-
-			local label = New("TextLabel", {
-				Name = "Text",
-				Parent = row,
+			New("TextLabel", {
+				Name = "Line" .. i,
+				Parent = box,
 				BackgroundTransparency = 1,
-				Position = UDim2.fromOffset(10, 0),
-				Size = UDim2.new(1, -10, 0, 0),
+				Size = UDim2.new(1, 0, 0, 0),
 				AutomaticSize = Enum.AutomaticSize.Y,
 				Font = FONT,
 				Text = body,
@@ -5889,6 +5883,7 @@ local function CreateTab(window, config)
 				TextYAlignment = Enum.TextYAlignment.Top,
 				TextWrapped = true,
 				RichText = false,
+				LayoutOrder = i,
 				ZIndex = 7,
 			})
 		end
