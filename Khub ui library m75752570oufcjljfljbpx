@@ -1943,19 +1943,28 @@ end
 
 local EnsureRoot
 
+local function GetNotifyWidth()
+	local size = GetViewport()
+	local mobile = IsTouchDevice() or size.X < 500
+	-- mobile: wider & readable | PC: compact side toast
+	if mobile then
+		return math.min(340, math.max(220, size.X - 24))
+	end
+	return math.min(300, math.max(220, size.X * 0.32))
+end
+
 local function BuildNotificationHolder()
-	local viewport = GetViewport()
-	local width = math.min(300, math.max(200, viewport.X * 0.7))
+	local width = GetNotifyWidth()
 	local offset = GetRootOffset()
 
 	NotificationHolder = New("Frame", {
-		Name = "CMNotifications",
+		Name = "KHUBNotifications",
 		Parent = ScreenGui,
 		BackgroundTransparency = 1,
 		AnchorPoint = Vector2.new(1, 0),
-		Position = UDim2.new(1, -14, 0, 14 - offset.Y),
-		Size = UDim2.new(0, width, 1, -28),
-		ZIndex = 500,
+		Position = UDim2.new(1, -12, 0, 12 - offset.Y),
+		Size = UDim2.new(0, width, 1, -24),
+		ZIndex = 2000,
 	})
 
 	New("UIListLayout", {
@@ -1969,12 +1978,9 @@ local function BuildNotificationHolder()
 
 	LibraryMaid:Give(ScreenGui:GetPropertyChangedSignal("AbsoluteSize"):Connect(function()
 		if NotificationHolder and NotificationHolder.Parent then
-			local size = GetViewport()
 			local newOffset = GetRootOffset()
-
-			NotificationHolder.Size =
-				UDim2.new(0, math.min(300, math.max(200, size.X * 0.7)), 1, -28)
-			NotificationHolder.Position = UDim2.new(1, -14, 0, 14 - newOffset.Y)
+			NotificationHolder.Size = UDim2.new(0, GetNotifyWidth(), 1, -24)
+			NotificationHolder.Position = UDim2.new(1, -12, 0, 12 - newOffset.Y)
 		end
 	end))
 end
@@ -2061,8 +2067,12 @@ function Library:Notify(options)
 	local usesThemeAccent = customColor == nil and variant.Color == nil
 
 	EnsureRoot()
+	if not NotificationHolder or not NotificationHolder.Parent then
+		BuildNotificationHolder()
+	end
 
-	local duration = tonumber(options.Duration) or 5
+	local duration = tonumber(options.Duration) or 2.5
+	local mobileNotify = IsTouchDevice() or GetViewport().X < 500
 	NotificationOrder = NotificationOrder + 1
 
 	local maid = Maid.new()
@@ -2158,7 +2168,7 @@ function Library:Notify(options)
 		Font = FONT_BOLD,
 		Text = tostring(options.Title or "KHUB"),
 		TextColor3 = T("Text"),
-		TextSize = 15,
+		TextSize = mobileNotify and 16 or 15,
 		TextXAlignment = Enum.TextXAlignment.Left,
 		TextWrapped = true,
 		RichText = true,
@@ -2177,7 +2187,7 @@ function Library:Notify(options)
 		Font = FONT,
 		Text = tostring(options.Content or ""),
 		TextColor3 = T("SubText"),
-		TextSize = 13,
+		TextSize = mobileNotify and 14 or 13,
 		TextXAlignment = Enum.TextXAlignment.Left,
 		TextWrapped = true,
 		RichText = true,
@@ -3788,6 +3798,17 @@ function Elements.Button(parent, config, owner)
 		end)
 
 		SafeCallback(object.Callback)
+		-- side toast like CM Hub
+		if config.Notify ~= false then
+			pcall(function()
+				Library:Notify({
+					Title = tostring(config.Title or "Button"),
+					Content = "Clicked",
+					Duration = 2,
+					Type = "default",
+				})
+			end)
+		end
 	end
 
 	base.Maid:Give(base.Row.MouseButton1Click:Connect(TriggerButtonPress))
@@ -3903,6 +3924,17 @@ function Elements.Toggle(parent, id, config, owner)
 
 		if not silent then
 			self:_FireChanged(state)
+			-- side toast like CM Hub
+			if config.Notify ~= false then
+				pcall(function()
+					Library:Notify({
+						Title = tostring(config.Title or "Toggle"),
+						Content = state and "Enabled" or "Disabled",
+						Duration = 2.2,
+						Type = state and "success" or "default",
+					})
+				end)
+			end
 		end
 
 		return self
@@ -4638,6 +4670,25 @@ function Elements.Dropdown(parent, id, config, owner)
 
 		if not silent then
 			self:_FireChanged(self.Value)
+			if config.Notify ~= false then
+				local shown
+				if multi and typeof(self.Value) == "table" then
+					local list = {}
+					for k, on in pairs(self.Value) do
+						if on then table.insert(list, tostring(k)) end
+					end
+					shown = (#list > 0) and table.concat(list, ", ") or "None"
+				else
+					shown = self.Value ~= nil and tostring(self.Value) or "None"
+				end
+				pcall(function()
+					Library:Notify({
+						Title = tostring(config.Title or "Dropdown"),
+						Content = shown,
+						Duration = 2.2,
+					})
+				end)
+			end
 		end
 
 		return self
@@ -8560,7 +8611,7 @@ end
 for _, env in ipairs(GetSharedEnvironments()) do
 	rawset(env, "KHUB_UI_LIBRARY", Library)
 	-- Alias so older load patterns still work
-	rawset(env, "CM_UI_LIBRARY", Library)
+	rawset(env, "KHUB_UI_LIBRARY", Library)
 	rawset(env, "KHUB", Library)
 end
 
