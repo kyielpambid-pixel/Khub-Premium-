@@ -5794,6 +5794,111 @@ local function CreateTab(window, config)
 
 	tab.AddSection = tab.NewSection
 
+	-- Colored instruction messages (old KHUB UI style)
+	--   "<> text"  = green
+	--   "$ text"   = violet
+	--   "> text"   = blue
+	--   plain text = green
+	function tab:AddMessages(lines)
+		if typeof(lines) == "string" then
+			lines = { lines }
+		end
+		if typeof(lines) ~= "table" then
+			return self
+		end
+
+		local COLORS = {
+			green  = Color3.fromRGB(95, 235, 165),
+			violet = Color3.fromRGB(175, 110, 255),
+			blue   = Color3.fromRGB(100, 180, 255),
+			dim    = Color3.fromRGB(140, 150, 190),
+		}
+
+		local wrap = New("Frame", {
+			Name = "KHUBMessages",
+			Parent = page,
+			BackgroundTransparency = 1,
+			BorderSizePixel = 0,
+			Size = UDim2.new(1, 0, 0, 0),
+			AutomaticSize = Enum.AutomaticSize.Y,
+			LayoutOrder = -100,
+			ZIndex = 5,
+		})
+		ListLayout(wrap, 6)
+		Padding(wrap, 0, 4, 0, 2)
+
+		for i, raw in ipairs(lines) do
+			local text = tostring(raw or "")
+			local color = COLORS.green
+			local body = text
+
+			if text:sub(1, 2) == "<>" then
+				color = COLORS.green
+				body = text:sub(3):gsub("^%s+", "")
+			elseif text:sub(1, 1) == "$" then
+				color = COLORS.violet
+				body = text:sub(2):gsub("^%s+", "")
+			elseif text:sub(1, 1) == ">" then
+				color = COLORS.blue
+				body = text:sub(2):gsub("^%s+", "")
+			end
+
+			local row = New("Frame", {
+				Name = "Msg" .. i,
+				Parent = wrap,
+				BackgroundColor3 = Color3.fromRGB(14, 18, 32),
+				BackgroundTransparency = 0.25,
+				BorderSizePixel = 0,
+				Size = UDim2.new(1, 0, 0, 0),
+				AutomaticSize = Enum.AutomaticSize.Y,
+				LayoutOrder = i,
+				ZIndex = 6,
+			})
+			Corner(row, 8)
+			local st = New("UIStroke", {
+				Parent = row,
+				Color = color,
+				Thickness = 1,
+				Transparency = 0.35,
+			})
+			Padding(row, 10, 10, 10, 10)
+
+			local bar = New("Frame", {
+				Name = "Bar",
+				Parent = row,
+				BackgroundColor3 = color,
+				BorderSizePixel = 0,
+				Size = UDim2.new(0, 3, 1, 0),
+				Position = UDim2.fromOffset(0, 0),
+				ZIndex = 7,
+			})
+			Corner(bar, 2)
+
+			local label = New("TextLabel", {
+				Name = "Text",
+				Parent = row,
+				BackgroundTransparency = 1,
+				Position = UDim2.fromOffset(10, 0),
+				Size = UDim2.new(1, -10, 0, 0),
+				AutomaticSize = Enum.AutomaticSize.Y,
+				Font = FONT,
+				Text = body,
+				TextColor3 = color,
+				TextSize = 13,
+				TextXAlignment = Enum.TextXAlignment.Left,
+				TextYAlignment = Enum.TextYAlignment.Top,
+				TextWrapped = true,
+				RichText = false,
+				ZIndex = 7,
+			})
+		end
+
+		return self
+	end
+
+	tab.Messages = tab.AddMessages
+	tab.tabMessages = tab.AddMessages
+
 	function tab:Select()
 		self.Window:SelectTab(self)
 		return self
@@ -6894,6 +6999,14 @@ local function BuildSettingsTab(window)
 
 	window.SettingsTab = tab
 
+	pcall(function()
+		tab:AddMessages({
+			"<> Script made by KHUB · Kyiel Pambid",
+			"<> Change theme, scale, and keybind here.",
+			"$ Config save / load is in this tab too.",
+		})
+	end)
+
 	--============================================
 	-- INTERFACE
 	--============================================
@@ -7225,6 +7338,14 @@ local function BuildCreditsTab(window)
 
 	window.CreditsTab = tab
 
+	pcall(function()
+		tab:AddMessages({
+			"<> Script made by KHUB · Kyiel Pambid",
+			"$ Join Discord for updates and support",
+			"> YouTube: youtube.com/@kyielpambid",
+		})
+	end)
+
 	local credits = tab:NewSection("Credits")
 
 	credits:AddParagraph({
@@ -7278,11 +7399,12 @@ local function BuildCreditsTab(window)
 end
 
 --==================================================
--- KHUB INTRO (skip supported)
+-- KHUB INTRO (blocking — UI opens after intro / skip)
 --==================================================
 
 local IntroPlayed = false
 
+-- Yields until intro finishes or is skipped.
 function Library:PlayIntro(opts)
 	opts = typeof(opts) == "table" and opts or {}
 	if IntroPlayed and not opts.Force then
@@ -7308,12 +7430,13 @@ function Library:PlayIntro(opts)
 	local WHITE = Color3.fromRGB(255, 255, 255)
 	local skipped = false
 	local finished = false
+	local doneFlag = Instance.new("BindableEvent")
 
 	local screenGui = Instance.new("ScreenGui")
 	screenGui.Name = "KHUBIntro"
 	screenGui.IgnoreGuiInset = true
 	screenGui.ResetOnSpawn = false
-	screenGui.DisplayOrder = 9999
+	screenGui.DisplayOrder = 10000
 	screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 	screenGui.Parent = playerGui
 
@@ -7322,6 +7445,7 @@ function Library:PlayIntro(opts)
 	darkOverlay.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
 	darkOverlay.BackgroundTransparency = 1
 	darkOverlay.BorderSizePixel = 0
+	darkOverlay.ZIndex = 1
 	darkOverlay.Parent = screenGui
 
 	local overlay = Instance.new("Frame")
@@ -7329,6 +7453,7 @@ function Library:PlayIntro(opts)
 	overlay.BackgroundColor3 = Color3.fromRGB(8, 4, 16)
 	overlay.BackgroundTransparency = 1
 	overlay.BorderSizePixel = 0
+	overlay.ZIndex = 2
 	overlay.Parent = screenGui
 
 	local mainLabel = Instance.new("TextLabel")
@@ -7337,10 +7462,11 @@ function Library:PlayIntro(opts)
 	mainLabel.Size = UDim2.new(1, -40, 0, 80)
 	mainLabel.BackgroundTransparency = 1
 	mainLabel.Font = FONT_BOLD
-	mainLabel.Text = "KHUB"
+	mainLabel.Text = "KHUB PANEL"
 	mainLabel.TextColor3 = WHITE
-	mainLabel.TextSize = 64
+	mainLabel.TextSize = 58
 	mainLabel.TextTransparency = 1
+	mainLabel.ZIndex = 10
 	mainLabel.Parent = screenGui
 
 	local subLabel = Instance.new("TextLabel")
@@ -7353,6 +7479,7 @@ function Library:PlayIntro(opts)
 	subLabel.TextColor3 = MAIN_COLOR
 	subLabel.TextSize = 16
 	subLabel.TextTransparency = 1
+	subLabel.ZIndex = 10
 	subLabel.Parent = screenGui
 
 	local subLabel2 = Instance.new("TextLabel")
@@ -7361,10 +7488,11 @@ function Library:PlayIntro(opts)
 	subLabel2.Size = UDim2.new(1, -40, 0, 22)
 	subLabel2.BackgroundTransparency = 1
 	subLabel2.Font = FONT
-	subLabel2.Text = "discord.gg/CTqBhzTGHV"
+	subLabel2.Text = "discord.gg/CTqBhzTGHV  ·  youtube.com/@kyielpambid"
 	subLabel2.TextColor3 = Color3.fromRGB(180, 160, 220)
 	subLabel2.TextSize = 13
 	subLabel2.TextTransparency = 1
+	subLabel2.ZIndex = 10
 	subLabel2.Parent = screenGui
 
 	local accentBar = Instance.new("Frame")
@@ -7373,6 +7501,7 @@ function Library:PlayIntro(opts)
 	accentBar.Size = UDim2.fromOffset(0, 3)
 	accentBar.BackgroundColor3 = MAIN_COLOR
 	accentBar.BorderSizePixel = 0
+	accentBar.ZIndex = 10
 	accentBar.Parent = screenGui
 
 	local skipBtn = Instance.new("TextButton")
@@ -7386,9 +7515,15 @@ function Library:PlayIntro(opts)
 	skipBtn.TextColor3 = WHITE
 	skipBtn.TextSize = 13
 	skipBtn.AutoButtonColor = false
+	skipBtn.ZIndex = 20
 	skipBtn.Parent = screenGui
 	Corner(skipBtn, 8)
-	Stroke(skipBtn, "Border", 1)
+	pcall(function()
+		local st = Instance.new("UIStroke")
+		st.Color = Color3.fromRGB(90, 45, 150)
+		st.Thickness = 1
+		st.Parent = skipBtn
+	end)
 
 	local blur = Instance.new("BlurEffect")
 	blur.Size = 0
@@ -7407,10 +7542,20 @@ function Library:PlayIntro(opts)
 		if finished then return end
 		finished = true
 		pcall(function()
-			if introSound then introSound:Stop(); introSound:Destroy() end
+			if introSound then
+				introSound:Stop()
+				introSound:Destroy()
+			end
 		end)
-		pcall(function() if blur then blur:Destroy() end end)
-		pcall(function() if screenGui then screenGui:Destroy() end end)
+		pcall(function()
+			if blur then blur:Destroy() end
+		end)
+		pcall(function()
+			if screenGui then screenGui:Destroy() end
+		end)
+		pcall(function()
+			doneFlag:Fire()
+		end)
 	end
 
 	skipBtn.MouseButton1Click:Connect(function()
@@ -7419,38 +7564,46 @@ function Library:PlayIntro(opts)
 	end)
 
 	task.spawn(function()
-		TweenService:Create(darkOverlay, TweenInfo.new(0.35), { BackgroundTransparency = 0.35 }):Play()
-		TweenService:Create(overlay, TweenInfo.new(0.45), { BackgroundTransparency = 0.15 }):Play()
-		TweenService:Create(blur, TweenInfo.new(0.45), { Size = 12 }):Play()
-		task.wait(0.2)
-		if skipped then return end
-		TweenService:Create(mainLabel, TweenInfo.new(0.5, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
-			TextTransparency = 0, TextSize = 68,
-		}):Play()
+		TweenService:Create(darkOverlay, TweenInfo.new(0.35), { BackgroundTransparency = 0.2 }):Play()
+		TweenService:Create(overlay, TweenInfo.new(0.45), { BackgroundTransparency = 0.05 }):Play()
+		TweenService:Create(blur, TweenInfo.new(0.45), { Size = 14 }):Play()
 		task.wait(0.25)
 		if skipped then return end
-		TweenService:Create(accentBar, TweenInfo.new(0.45, Enum.EasingStyle.Elastic, Enum.EasingDirection.Out), {
-			Size = UDim2.fromOffset(220, 3),
+
+		TweenService:Create(mainLabel, TweenInfo.new(0.55, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+			TextTransparency = 0,
+			TextSize = 70,
 		}):Play()
-		TweenService:Create(subLabel, TweenInfo.new(0.4), { TextTransparency = 0.05 }):Play()
-		TweenService:Create(subLabel2, TweenInfo.new(0.4), { TextTransparency = 0.15 }):Play()
-		task.wait(1.35)
+		task.wait(0.3)
 		if skipped then return end
-		local fade = TweenInfo.new(0.7, Enum.EasingStyle.Quad, Enum.EasingDirection.In)
+
+		TweenService:Create(accentBar, TweenInfo.new(0.5, Enum.EasingStyle.Elastic, Enum.EasingDirection.Out), {
+			Size = UDim2.fromOffset(240, 3),
+		}):Play()
+		TweenService:Create(subLabel, TweenInfo.new(0.4), { TextTransparency = 0 }):Play()
+		TweenService:Create(subLabel2, TweenInfo.new(0.45), { TextTransparency = 0.1 }):Play()
+		task.wait(1.5)
+		if skipped then return end
+
+		local fade = TweenInfo.new(0.65, Enum.EasingStyle.Quad, Enum.EasingDirection.In)
 		TweenService:Create(mainLabel, fade, { TextTransparency = 1 }):Play()
 		TweenService:Create(subLabel, fade, { TextTransparency = 1 }):Play()
 		TweenService:Create(subLabel2, fade, { TextTransparency = 1 }):Play()
 		TweenService:Create(accentBar, fade, { BackgroundTransparency = 1 }):Play()
 		TweenService:Create(overlay, fade, { BackgroundTransparency = 1 }):Play()
 		TweenService:Create(darkOverlay, fade, { BackgroundTransparency = 1 }):Play()
-		TweenService:Create(blur, TweenInfo.new(0.7), { Size = 0 }):Play()
+		TweenService:Create(blur, TweenInfo.new(0.65), { Size = 0 }):Play()
 		TweenService:Create(skipBtn, fade, { TextTransparency = 1, BackgroundTransparency = 1 }):Play()
-		task.wait(0.75)
+		task.wait(0.7)
 		cleanup()
 	end)
 
-	-- safety
-	task.delay(8, cleanup)
+	-- hard safety so script never hangs forever
+	task.delay(9, cleanup)
+
+	-- BLOCK until intro is done / skipped
+	doneFlag.Event:Wait()
+	pcall(function() doneFlag:Destroy() end)
 end
 
 --==================================================
@@ -7468,12 +7621,11 @@ function Library:CreateWindow(config)
 		return existing
 	end
 
-	-- Intro once (can skip)
+	-- 1) Intro first (blocks until finish / SKIP)
+	-- 2) Then build + show UI
 	if not (typeof(config) == "table" and config.SkipIntro == true) then
-		task.spawn(function()
-			pcall(function()
-				Library:PlayIntro()
-			end)
+		pcall(function()
+			Library:PlayIntro()
 		end)
 	end
 
