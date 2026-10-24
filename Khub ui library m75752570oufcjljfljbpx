@@ -211,7 +211,7 @@ local function SafeCallback(callback, ...)
 	end)
 
 	if not success then
-		warn("[CM UI] Callback error:", result)
+		warn("[KHUB UI] Callback error:", result)
 		return nil
 	end
 
@@ -437,25 +437,25 @@ Maid.Destroy = Maid.DoCleaning
 
 local Themes = {
 	DarkTheme = {
-		Background   = Color3.fromRGB(12, 8, 20),
-		Header       = Color3.fromRGB(18, 12, 28),
-		Element      = Color3.fromRGB(28, 18, 42),
-		ElementHover = Color3.fromRGB(42, 28, 62),
-		Text         = Color3.fromRGB(245, 238, 255),
-		SubText      = Color3.fromRGB(170, 145, 205),
-		Accent       = Color3.fromRGB(160, 90, 230),
-		Border       = Color3.fromRGB(70, 45, 110),
+		Background   = Color3.fromRGB(10, 6, 18),
+		Header       = Color3.fromRGB(16, 10, 28),
+		Element      = Color3.fromRGB(26, 14, 44),
+		ElementHover = Color3.fromRGB(40, 22, 66),
+		Text         = Color3.fromRGB(248, 240, 255),
+		SubText      = Color3.fromRGB(180, 150, 220),
+		Accent       = Color3.fromRGB(170, 80, 255),
+		Border       = Color3.fromRGB(90, 45, 150),
 	},
 
 	Purple = {
-		Background   = Color3.fromRGB(12, 8, 20),
-		Header       = Color3.fromRGB(18, 12, 28),
-		Element      = Color3.fromRGB(28, 18, 42),
-		ElementHover = Color3.fromRGB(42, 28, 62),
-		Text         = Color3.fromRGB(245, 238, 255),
-		SubText      = Color3.fromRGB(170, 145, 205),
-		Accent       = Color3.fromRGB(160, 90, 230),
-		Border       = Color3.fromRGB(70, 45, 110),
+		Background   = Color3.fromRGB(10, 6, 18),
+		Header       = Color3.fromRGB(16, 10, 28),
+		Element      = Color3.fromRGB(26, 14, 44),
+		ElementHover = Color3.fromRGB(40, 22, 66),
+		Text         = Color3.fromRGB(248, 240, 255),
+		SubText      = Color3.fromRGB(180, 150, 220),
+		Accent       = Color3.fromRGB(170, 80, 255),
+		Border       = Color3.fromRGB(90, 45, 150),
 	},
 
 	LightTheme = {
@@ -1583,7 +1583,7 @@ local CM_LOGO_DURATIONS = {0.07,0.06,0.07,0.07,0.06,0.07,0.07,0.06,0.07,0.07,0.0
 	local function CreateAura(parent, zIndex)
 		local floating = parent.Name == "KHUBFloatingButton"
 		local root = New("Frame", {
-			Name = "CMFlameAura", Parent = parent, BackgroundTransparency = 1,
+			Name = "KHUBFlameAura", Parent = parent, BackgroundTransparency = 1,
 			Size = UDim2.fromScale(1, 1), Active = false, ZIndex = zIndex - 1,
 		})
 		local aura = { Root = root, Rings = {}, Wisps = {}, Floating = floating }
@@ -1676,11 +1676,12 @@ local CM_LOGO_DURATIONS = {0.07,0.06,0.07,0.07,0.06,0.07,0.07,0.06,0.07,0.07,0.0
 
 	function Library:_AttachAnimatedLogo(parent, fallback, zIndex)
 		local image = New("ImageLabel", {
-			Name = "CMAnimatedLogo", Parent = parent,
+			Name = "KHUBAnimatedLogo", Parent = parent,
 			BackgroundColor3 = Color3.new(0, 0, 0), BackgroundTransparency = 1, BorderSizePixel = 0,
 			Size = UDim2.fromScale(1, 1), Image = "",
 			ImageColor3 = Color3.new(1, 1, 1), Active = false,
-			-- Center-square view keeps the CM monogram readable on small badges.
+			ScaleType = Enum.ScaleType.Fit,
+			-- Full logo view (static KHUB asset, no sprite sheet crop).
 			ImageRectSize = Vector2.new(0, 0), ImageRectOffset = Vector2.new(0, 0),
 			Visible = true, ZIndex = zIndex,
 		})
@@ -1694,7 +1695,7 @@ local CM_LOGO_DURATIONS = {0.07,0.06,0.07,0.07,0.06,0.07,0.07,0.06,0.07,0.07,0.0
 			if content then
 				image.Image = content
 				-- Keep the image renderable while fetching; transparent background
-				-- leaves the CM fallback text underneath visible until it is ready.
+				-- leaves the KH fallback text underneath visible until it is ready.
 				pcall(function()
 					game:GetService("ContentProvider"):PreloadAsync({image})
 				end)
@@ -1727,8 +1728,9 @@ local CM_LOGO_DURATIONS = {0.07,0.06,0.07,0.07,0.06,0.07,0.07,0.06,0.07,0.07,0.0
 							Library.LogoStatus = "ready"
 						end
 						if target.Ready and Visible(label) then
-							local index = frameIndex - 1
-							label.ImageRectOffset = Vector2.new((index % 8) * 128 + 28, math.floor(index / 8) * 72)
+							-- Static KHUB logo (full image). Aura still pulses via RenderAura.
+							label.ImageRectOffset = Vector2.new(0, 0)
+							label.ImageRectSize = Vector2.new(0, 0)
 							label:SetAttribute("Frame", frameIndex)
 						end
 					end
@@ -2533,7 +2535,7 @@ local function RegisterOption(id, option)
 			newId = id .. "_" .. suffix
 		end
 
-		warn(("[CM UI] Duplicate option id '%s' registered as '%s'"):format(id, newId))
+		warn(("[KHUB UI] Duplicate option id '%s' registered as '%s'"):format(id, newId))
 		id = newId
 	end
 
@@ -2984,7 +2986,7 @@ function Config:Save(name)
 	end)
 
 	if not ok then
-		warn("[CM UI] Failed to encode configuration:", encoded)
+		warn("[KHUB UI] Failed to encode configuration:", encoded)
 		return false, "encode failed"
 	end
 
@@ -3031,7 +3033,7 @@ function Config:Load(name, options)
 	end)
 
 	if not ok or typeof(data) ~= "table" then
-		warn("[CM UI] Failed to decode configuration:", data)
+		warn("[KHUB UI] Failed to decode configuration:", data)
 		return false, "decode failed"
 	end
 
@@ -3077,7 +3079,7 @@ function Config:Load(name, options)
 					table.insert(restoredOptions, option)
 				else
 					report.Failed = report.Failed + 1
-					warn("[CM UI] Failed to restore option:", id, restoreError)
+					warn("[KHUB UI] Failed to restore option:", id, restoreError)
 				end
 			else
 				report.Skipped = report.Skipped + 1
@@ -5992,7 +5994,7 @@ local function CreateTab(window, config)
 end
 
 --==================================================
--- FLOATING CM BUTTON
+-- FLOATING KHUB BUTTON
 --==================================================
 
 local function RenderFloatingButton(isOpen)
@@ -7700,6 +7702,9 @@ end
 
 for _, env in ipairs(GetSharedEnvironments()) do
 	rawset(env, "KHUB_UI_LIBRARY", Library)
+	-- Alias so older load patterns still work
+	rawset(env, "CM_UI_LIBRARY", Library)
+	rawset(env, "KHUB", Library)
 end
 
 --==================================================
