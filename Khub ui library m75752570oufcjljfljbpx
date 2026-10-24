@@ -5794,11 +5794,8 @@ local function CreateTab(window, config)
 
 	tab.AddSection = tab.NewSection
 
-	-- One instruction box per tab (colored lines inside)
-	--   "<> text"  = green
-	--   "$ text"   = violet
-	--   "> text"   = blue
-	--   plain text = green
+	-- Compact instruction box (one box · fits content only)
+	--   "<> text" = green | "$ text" = violet | "> text" = blue | plain = green
 	-- Calling again replaces the box (no stacking).
 	function tab:AddMessages(lines)
 		if typeof(lines) == "string" then
@@ -5814,50 +5811,16 @@ local function CreateTab(window, config)
 			blue   = Color3.fromRGB(100, 180, 255),
 		}
 
-		-- remove old box if any (no duplicate)
 		pcall(function()
 			local old = page:FindFirstChild("KHUBMessages")
 			if old then old:Destroy() end
 		end)
 
-		local box = New("Frame", {
-			Name = "KHUBMessages",
-			Parent = page,
-			BackgroundColor3 = Color3.fromRGB(14, 18, 32),
-			BackgroundTransparency = 0.2,
-			BorderSizePixel = 0,
-			Size = UDim2.new(1, 0, 0, 0),
-			AutomaticSize = Enum.AutomaticSize.Y,
-			LayoutOrder = -100,
-			ZIndex = 5,
-		})
-		Corner(box, 10)
-		New("UIStroke", {
-			Parent = box,
-			Color = COLORS.green,
-			Thickness = 1,
-			Transparency = 0.4,
-		})
-		Padding(box, 12, 12, 14, 12)
-		ListLayout(box, 5)
-
-		-- left green accent strip
-		local bar = New("Frame", {
-			Name = "AccentBar",
-			Parent = box,
-			BackgroundColor3 = COLORS.green,
-			BorderSizePixel = 0,
-			Size = UDim2.new(0, 3, 1, 0),
-			Position = UDim2.fromOffset(0, 0),
-			ZIndex = 6,
-		})
-		Corner(bar, 2)
-
-		for i, raw in ipairs(lines) do
+		local parsed = {}
+		for _, raw in ipairs(lines) do
 			local text = tostring(raw or "")
 			local color = COLORS.green
 			local body = text
-
 			if text:sub(1, 2) == "<>" then
 				color = COLORS.green
 				body = text:sub(3):gsub("^%s+", "")
@@ -5868,6 +5831,45 @@ local function CreateTab(window, config)
 				color = COLORS.blue
 				body = text:sub(2):gsub("^%s+", "")
 			end
+			table.insert(parsed, { body = body, color = color })
+		end
+
+		local box = New("Frame", {
+			Name = "KHUBMessages",
+			Parent = page,
+			BackgroundColor3 = Color3.fromRGB(14, 18, 32),
+			BackgroundTransparency = 0.25,
+			BorderSizePixel = 0,
+			Size = UDim2.new(1, 0, 0, 0),
+			AutomaticSize = Enum.AutomaticSize.Y,
+			LayoutOrder = -100,
+			ZIndex = 5,
+		})
+		Corner(box, 8)
+		New("UIStroke", {
+			Parent = box,
+			Color = COLORS.green,
+			Thickness = 1,
+			Transparency = 0.45,
+		})
+		-- tight padding · 2px gap between lines
+		Padding(box, 8, 8, 10, 8)
+		ListLayout(box, 2)
+
+		for i, item in ipairs(parsed) do
+			-- thin divider under the first line when more lines exist
+			if i == 2 then
+				New("Frame", {
+					Name = "Sep",
+					Parent = box,
+					BackgroundColor3 = COLORS.green,
+					BackgroundTransparency = 0.7,
+					BorderSizePixel = 0,
+					Size = UDim2.new(1, 0, 0, 1),
+					LayoutOrder = 1,
+					ZIndex = 6,
+				})
+			end
 
 			New("TextLabel", {
 				Name = "Line" .. i,
@@ -5876,14 +5878,14 @@ local function CreateTab(window, config)
 				Size = UDim2.new(1, 0, 0, 0),
 				AutomaticSize = Enum.AutomaticSize.Y,
 				Font = FONT,
-				Text = body,
-				TextColor3 = color,
-				TextSize = 13,
+				Text = item.body,
+				TextColor3 = item.color,
+				TextSize = 12,
 				TextXAlignment = Enum.TextXAlignment.Left,
 				TextYAlignment = Enum.TextYAlignment.Top,
 				TextWrapped = true,
 				RichText = false,
-				LayoutOrder = i,
+				LayoutOrder = (i == 1) and 0 or (i + 1),
 				ZIndex = 7,
 			})
 		end
@@ -6997,8 +6999,7 @@ local function BuildSettingsTab(window)
 	pcall(function()
 		tab:AddMessages({
 			"<> Script made by KHUB · Kyiel Pambid",
-			"<> Change theme, scale, and keybind here.",
-			"$ Config save / load is in this tab too.",
+			"<> Theme, scale, keybind + config save/load.",
 		})
 	end)
 
@@ -7336,8 +7337,7 @@ local function BuildCreditsTab(window)
 	pcall(function()
 		tab:AddMessages({
 			"<> Script made by KHUB · Kyiel Pambid",
-			"$ Join Discord for updates and support",
-			"> YouTube: youtube.com/@kyielpambid",
+			"$ Discord + YouTube links below.",
 		})
 	end)
 
@@ -8560,7 +8560,7 @@ end
 for _, env in ipairs(GetSharedEnvironments()) do
 	rawset(env, "KHUB_UI_LIBRARY", Library)
 	-- Alias so older load patterns still work
-	rawset(env, "KHUB_UI_LIBRARY", Library)
+	rawset(env, "CM_UI_LIBRARY", Library)
 	rawset(env, "KHUB", Library)
 end
 
