@@ -1,581 +1,432 @@
---[[
-============================================================
- KHUB UI LIBRARY
- Style target : Timebomb Premium (Rexx / AirFlow API)
- Goal         : same API · less lag · own KHUB look
- Author       : Kyiel Pambid (KHUB)
- Logo         : rbxassetid://116838166946511
- Discord      : https://discord.gg/CTqBhzTGHV
- YouTube      : https://www.youtube.com/@kyielpambid
-============================================================
+# KHUB · UI How To (Rexx / AirFlow) + Intro
 
-LOAD
-  loadstring(game:HttpGet("YOUR_RAW_URL"))()
-  local Library = getgenv().KHUB_UI_LIBRARY
+Upload this file with your scripts so any AI / coder knows the exact workflow.
 
-WINDOW (same as Timebomb / Rexx)
-  local Window = Library:CreateWindow({
-      Name = "KHUB_MyScript",
-      Title = "KHUB · My Script",
-      Keybind = Enum.KeyCode.RightShift,
-      Size = UDim2.fromOffset(620, 480),
-  })
+**UI loader (always):**
+```lua
+https://carbonpanel.x10.mx/api/loader.php?script=48
+```
 
-TAB
-  local Tab = Window:Tab({ Name = "Combat", Icon = "swords" })
-  -- Icons: home settings user sword swords zap eye star tools
-  --        info save server heart map box footprints
+**Discord:** https://discord.gg/CTqBhzTGHV  
+**YouTube:** https://www.youtube.com/@kyielpambid  
+**Logo:** `rbxassetid://116838166946511`  
+**Intro sound:** `rbxassetid://120267378058133` (start at TimePosition = 10)
 
-MESSAGES (KHUB extra · colored instructions)
-  Tab:AddMessages({
-      "<> Script made by KHUB · Kyiel Pambid",
-      "<> How it works: turn on what you need.",
-      "$ Report bugs on Discord.",
-      "> Blue tip line.",
-  })
-  -- <> green | $ violet | > blue
+---
 
-CONTROLS (same shape as Timebomb paste)
-  Tab:Section("TARGETING")
-  Tab:Toggle({ Name = "Auto Farm", CurrentValue = false, Flag = "AutoFarm", Callback = function(v) end })
-  Tab:Slider({ Name = "Speed", Min = 1, Max = 50, Default = 10, Increment = 1, Flag = "Speed", Callback = function(v) end })
-  Tab:Dropdown({ Name = "Mode", Options = {"A","B"}, CurrentOption = "A", Callback = function(o) end })
-  Tab:Button({ Name = "Do It", Callback = function() end })
-  Tab:Label({ Text = "Hello" })
-  Tab:Paragraph({ Title = "Info", Content = "Body text" })
+## ALWAYS ORDER
 
-NOTIFY
-  Window:Notify({ Title = "KHUB", Content = "Loaded", Duration = 3 })
+1. **Intro first** (KHUB Panel intro — can skip)
+2. Load Rexx UI library
+3. `CreateWindow`
+4. Create **all tabs** first
+5. Fill each tab with `do ... end`
+6. Features / loops last
 
-TOGGLE UI: RightShift / RightControl / K · floating orb
-============================================================
-]]
+---
 
+## 1. INTRO (copy this block every script)
+
+Play **before** the main UI. User can press **SKIP**. Sound starts at second 10.
+
+```lua
+--------------------------------------------------------------------
+-- KHUB INTRO (same as Timebomb Premium / Dandy's World)
+--------------------------------------------------------------------
+local function playKHUBIntro()
+	local Players = game:GetService("Players")
+	local TweenService = game:GetService("TweenService")
+	local Lighting = game:GetService("Lighting")
+	local SoundService = game:GetService("SoundService")
+
+	local player = Players.LocalPlayer
+	local playerGui = player:WaitForChild("PlayerGui")
+
+	-- cleanup old
+	pcall(function()
+		local old = playerGui:FindFirstChild("KHUBIntro")
+		if old then old:Destroy() end
+	end)
+
+	local MAIN_COLOR = Color3.fromRGB(157, 78, 221)
+	local WHITE = Color3.fromRGB(255, 255, 255)
+	local SOUND_ID = 120267378058133
+
+	local screenGui = Instance.new("ScreenGui")
+	screenGui.Name = "KHUBIntro"
+	screenGui.IgnoreGuiInset = true
+	screenGui.ResetOnSpawn = false
+	screenGui.DisplayOrder = 999999
+	screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+	screenGui.Parent = playerGui
+
+	local darkOverlay = Instance.new("Frame")
+	darkOverlay.Size = UDim2.fromScale(1, 1)
+	darkOverlay.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+	darkOverlay.BackgroundTransparency = 1
+	darkOverlay.BorderSizePixel = 0
+	darkOverlay.Parent = screenGui
+
+	local overlay = Instance.new("Frame")
+	overlay.Size = UDim2.fromScale(1, 1)
+	overlay.BackgroundColor3 = Color3.fromRGB(8, 4, 16)
+	overlay.BackgroundTransparency = 1
+	overlay.BorderSizePixel = 0
+	overlay.Parent = screenGui
+
+	local mainLabel = Instance.new("TextLabel")
+	mainLabel.AnchorPoint = Vector2.new(0.5, 0.5)
+	mainLabel.Position = UDim2.fromScale(0.5, 0.45)
+	mainLabel.Size = UDim2.new(0.9, 0, 0, 70)
+	mainLabel.BackgroundTransparency = 1
+	mainLabel.Font = Enum.Font.GothamBold
+	mainLabel.Text = "KHUB PANEL"
+	mainLabel.TextColor3 = WHITE
+	mainLabel.TextSize = 42
+	mainLabel.TextTransparency = 1
+	mainLabel.Parent = screenGui
+
+	local subLabel = Instance.new("TextLabel")
+	subLabel.AnchorPoint = Vector2.new(0.5, 0)
+	subLabel.Position = UDim2.new(0.5, 0, 0.45, 40)
+	subLabel.Size = UDim2.new(0.8, 0, 0, 24)
+	subLabel.BackgroundTransparency = 1
+	subLabel.Font = Enum.Font.Gotham
+	subLabel.Text = "by Kyiel Pambid"
+	subLabel.TextColor3 = MAIN_COLOR
+	subLabel.TextSize = 16
+	subLabel.TextTransparency = 1
+	subLabel.Parent = screenGui
+
+	local subLabel2 = Instance.new("TextLabel")
+	subLabel2.AnchorPoint = Vector2.new(0.5, 0)
+	subLabel2.Position = UDim2.new(0.5, 0, 0.45, 64)
+	subLabel2.Size = UDim2.new(0.8, 0, 0, 20)
+	subLabel2.BackgroundTransparency = 1
+	subLabel2.Font = Enum.Font.Gotham
+	subLabel2.Text = "Loading..."
+	subLabel2.TextColor3 = Color3.fromRGB(180, 160, 220)
+	subLabel2.TextSize = 13
+	subLabel2.TextTransparency = 1
+	subLabel2.Parent = screenGui
+
+	local accentBar = Instance.new("Frame")
+	accentBar.AnchorPoint = Vector2.new(0.5, 0)
+	accentBar.Position = UDim2.new(0.5, 0, 0.45, 96)
+	accentBar.Size = UDim2.fromOffset(0, 3)
+	accentBar.BackgroundColor3 = MAIN_COLOR
+	accentBar.BorderSizePixel = 0
+	accentBar.Parent = screenGui
+
+	local skipBtn = Instance.new("TextButton")
+	skipBtn.AnchorPoint = Vector2.new(1, 1)
+	skipBtn.Position = UDim2.new(1, -20, 1, -20)
+	skipBtn.Size = UDim2.fromOffset(90, 34)
+	skipBtn.BackgroundColor3 = Color3.fromRGB(30, 20, 50)
+	skipBtn.Text = "SKIP"
+	skipBtn.TextColor3 = WHITE
+	skipBtn.Font = Enum.Font.GothamBold
+	skipBtn.TextSize = 14
+	skipBtn.AutoButtonColor = true
+	skipBtn.Parent = screenGui
+	Instance.new("UICorner", skipBtn).CornerRadius = UDim.new(0, 8)
+
+	local blur = Instance.new("BlurEffect")
+	blur.Size = 0
+	blur.Parent = Lighting
+
+	local introSound = Instance.new("Sound")
+	introSound.Name = "KHUBIntroSound"
+	introSound.SoundId = "rbxassetid://" .. tostring(SOUND_ID)
+	introSound.Volume = 0.7
+	introSound.Looped = false
+	introSound.Parent = SoundService
+
+	local skipped = false
+	local function cleanup()
+		pcall(function() introSound:Stop() end)
+		pcall(function() introSound:Destroy() end)
+		pcall(function() blur:Destroy() end)
+		pcall(function() screenGui:Destroy() end)
+	end
+
+	skipBtn.MouseButton1Click:Connect(function()
+		skipped = true
+		cleanup()
+	end)
+
+	-- play sound from 10s mark (same as Dandy / Timebomb)
+	pcall(function()
+		introSound:Play()
+		introSound.TimePosition = 10
+	end)
+
+	TweenService:Create(darkOverlay, TweenInfo.new(0.4), { BackgroundTransparency = 0.35 }):Play()
+	TweenService:Create(overlay, TweenInfo.new(0.5), { BackgroundTransparency = 0.15 }):Play()
+	TweenService:Create(blur, TweenInfo.new(0.5), { Size = 12 }):Play()
+	task.wait(0.25)
+	if skipped then return end
+
+	TweenService:Create(mainLabel, TweenInfo.new(0.45), { TextTransparency = 0 }):Play()
+	task.wait(0.2)
+	if skipped then return end
+	TweenService:Create(subLabel, TweenInfo.new(0.4), { TextTransparency = 0.05 }):Play()
+	TweenService:Create(subLabel2, TweenInfo.new(0.4), { TextTransparency = 0.15 }):Play()
+	TweenService:Create(accentBar, TweenInfo.new(0.55, Enum.EasingStyle.Elastic, Enum.EasingDirection.Out), {
+		Size = UDim2.fromOffset(280, 3),
+	}):Play()
+
+	task.wait(1.6)
+	if skipped then return end
+
+	-- fade out
+	local fade = TweenInfo.new(0.7, Enum.EasingStyle.Quad, Enum.EasingDirection.In)
+	TweenService:Create(mainLabel, fade, { TextTransparency = 1 }):Play()
+	TweenService:Create(subLabel, fade, { TextTransparency = 1 }):Play()
+	TweenService:Create(subLabel2, fade, { TextTransparency = 1 }):Play()
+	TweenService:Create(accentBar, fade, { BackgroundTransparency = 1 }):Play()
+	TweenService:Create(overlay, fade, { BackgroundTransparency = 1 }):Play()
+	TweenService:Create(darkOverlay, fade, { BackgroundTransparency = 1 }):Play()
+	TweenService:Create(blur, TweenInfo.new(0.7), { Size = 0 }):Play()
+	pcall(function()
+		TweenService:Create(introSound, TweenInfo.new(0.8), { Volume = 0 }):Play()
+	end)
+	task.wait(0.85)
+	cleanup()
+end
+
+-- run intro (blocking until done or skipped)
+pcall(playKHUBIntro)
+```
+
+---
+
+## 2. LOAD UI
+
+```lua
+local Library = loadstring(game:HttpGet("https://carbonpanel.x10.mx/api/loader.php?script=48"))()
+
+pcall(function()
+	if Library.SetTheme then
+		Library:SetTheme("Nebula")
+	end
+end)
+```
+
+---
+
+## 3. CREATE WINDOW
+
+```lua
+local Window = Library:CreateWindow({
+	Name = "KHUB_MyScript",
+	Title = "KHUB · My Game",          -- always = game name
+	Keybind = Enum.KeyCode.RightShift,
+	Size = UDim2.fromOffset(620, 480),
+	ConfigurationSaving = {
+		FolderName = "KHUB_MyScript_Configs",
+		FileName = "default",
+	},
+})
+
+local function uiNotify(title, content, success)
+	pcall(function()
+		Window:Notify({
+			Title = title or "KHUB",
+			Content = content or "",
+			Type = success and "Success" or "Warning",
+			Duration = 3,
+		})
+	end)
+end
+```
+
+---
+
+## 4. CREATE TABS (always first)
+
+```lua
+local TabWelcome  = Window:Tab({ Name = "Welcome",  Icon = "home" })
+local TabMain     = Window:Tab({ Name = "Main",     Icon = "zap" })
+local TabPlayer   = Window:Tab({ Name = "Player",   Icon = "user" })
+local TabSettings = Window:Tab({ Name = "Settings", Icon = "settings" })
+local TabServer   = Window:Tab({ Name = "Server",   Icon = "server" })
+```
+
+### Icons
+| Icon | Use |
+|------|-----|
+| `home` | Welcome |
+| `settings` | Settings / Misc |
+| `user` | Player |
+| `server` | Server / links |
+| `swords` | Combat |
+| `zap` | Main / farm |
+| `eye` | ESP / Visuals |
+| `star` | Premium / special |
+| `map` | Teleport |
+| `box` | Misc |
+| `footprints` | Walk / movement |
+| `save` | Config |
+| `heart` | Health |
+
+---
+
+## 5. FILL TAB (do blocks)
+
+```lua
+do
+	TabMain:Section("FARM")
+
+	TabMain:Toggle({
+		Name = "Auto Farm",
+		CurrentValue = false,
+		Flag = "AutoFarm",
+		Callback = function(v)
+			-- v = true / false
+		end,
+	})
+
+	TabMain:Slider({
+		Name = "Delay",
+		Min = 0.1,
+		Max = 5,
+		Default = 1,
+		Increment = 0.1,
+		Flag = "FarmDelay",
+		Callback = function(v) end,
+	})
+
+	TabMain:Dropdown({
+		Name = "Mode",
+		Options = { "A", "B", "C" },
+		CurrentOption = "A",
+		Flag = "Mode",
+		Callback = function(opt) end,
+	})
+
+	TabMain:Button({
+		Name = "Run Once",
+		Callback = function()
+			uiNotify("Done", "Clicked", true)
+		end,
+	})
+
+	TabMain:Label({ Text = "Any helper text" })
+
+	TabMain:Paragraph({
+		Title = "Info",
+		Content = "Longer description.",
+	})
+end
+```
+
+---
+
+## 6. FULL TEMPLATE (intro + UI)
+
+```lua
 repeat task.wait() until game:IsLoaded()
 
-local Players          = game:GetService("Players")
-local TweenService     = game:GetService("TweenService")
-local UserInputService = game:GetService("UserInputService")
-local CoreGui          = game:GetService("CoreGui")
-local HttpService      = game:GetService("HttpService")
+-- ========== PASTE INTRO FUNCTION HERE (section 1) ==========
+pcall(playKHUBIntro)
 
-local LP = Players.LocalPlayer
-local LOGO = "rbxassetid://116838166946511"
-local DISCORD = "https://discord.gg/CTqBhzTGHV"
-local YOUTUBE = "https://www.youtube.com/@kyielpambid"
+-- ========== UI ==========
+local Library = loadstring(game:HttpGet("https://carbonpanel.x10.mx/api/loader.php?script=48"))()
+pcall(function()
+	if Library.SetTheme then Library:SetTheme("Nebula") end
+end)
 
--- Rexx-like dark + violet accent (KHUB)
-local T = {
-	bg = Color3.fromRGB(14, 12, 20),
-	top = Color3.fromRGB(20, 16, 30),
-	side = Color3.fromRGB(16, 14, 24),
-	card = Color3.fromRGB(26, 22, 38),
-	hover = Color3.fromRGB(34, 28, 50),
-	accent = Color3.fromRGB(157, 78, 221),
-	text = Color3.fromRGB(235, 230, 250),
-	dim = Color3.fromRGB(145, 135, 170),
-	stroke = Color3.fromRGB(70, 45, 110),
-	green = Color3.fromRGB(95, 235, 165),
-	violet = Color3.fromRGB(175, 110, 255),
-	blue = Color3.fromRGB(100, 180, 255),
-	off = Color3.fromRGB(42, 38, 55),
-	on = Color3.fromRGB(157, 78, 221),
-}
+local Window = Library:CreateWindow({
+	Name = "KHUB_Template",
+	Title = "KHUB · Template",
+	Keybind = Enum.KeyCode.RightShift,
+	Size = UDim2.fromOffset(620, 480),
+	ConfigurationSaving = {
+		FolderName = "KHUB_Template_Configs",
+		FileName = "default",
+	},
+})
 
-local ICONS = {
-	home = "rbxassetid://6031097226", settings = "rbxassetid://6031280882",
-	user = "rbxassetid://6034287594", sword = "rbxassetid://6031229347",
-	swords = "rbxassetid://6031229347", zap = "rbxassetid://6034508292",
-	eye = "rbxassetid://6031075931", star = "rbxassetid://6031265976",
-	tools = "rbxassetid://6031280882", info = "rbxassetid://6031071053",
-	save = "rbxassetid://6031260796", server = "rbxassetid://6034949389",
-	heart = "rbxassetid://6031068426", map = "rbxassetid://6031229358",
-	box = "rbxassetid://6031090990", footprints = "rbxassetid://6034508292",
-}
-
-local FONT, FB, FM = Enum.Font.Gotham, Enum.Font.GothamBold, Enum.Font.GothamMedium
-local mobile = UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled
-
-local Library = {}
-getgenv().KHUB_UI_LIBRARY = Library
-getgenv().CM_UI_LIBRARY = Library
-
-local function parent()
-	local ok, h = pcall(function() if gethui then return gethui() end end)
-	if ok and h then return h end
-	ok, h = pcall(function() return CoreGui end)
-	if ok and h then return h end
-	return LP:WaitForChild("PlayerGui")
-end
-
-local function C(p, r)
-	local x = Instance.new("UICorner"); x.CornerRadius = UDim.new(0, r or 8); x.Parent = p; return x
-end
-local function S(p, col, th, tr)
-	local x = Instance.new("UIStroke"); x.Color = col or T.stroke; x.Thickness = th or 1; x.Transparency = tr or 0.4; x.Parent = p; return x
-end
-local function P(p, a, b, c, d)
-	local x = Instance.new("UIPadding")
-	x.PaddingTop = UDim.new(0, a or 8); x.PaddingBottom = UDim.new(0, b or 8)
-	x.PaddingLeft = UDim.new(0, c or 8); x.PaddingRight = UDim.new(0, d or 8); x.Parent = p; return x
-end
-local function L(p, g)
-	local x = Instance.new("UIListLayout"); x.SortOrder = Enum.SortOrder.LayoutOrder; x.Padding = UDim.new(0, g or 6); x.Parent = p; return x
-end
-local function tw(o, props, t)
-	TweenService:Create(o, TweenInfo.new(t or 0.15, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), props):Play()
-end
-
--- toasts
-local toastHolder, toastN = nil, 0
-local function ensureToast()
-	if toastHolder and toastHolder.Parent then return end
-	local g = Instance.new("ScreenGui")
-	g.Name = "KHUB_Toasts"; g.ResetOnSpawn = false; g.IgnoreGuiInset = true
-	g.DisplayOrder = 999999; g.Parent = parent()
-	toastHolder = Instance.new("Frame")
-	toastHolder.BackgroundTransparency = 1
-	toastHolder.AnchorPoint = Vector2.new(1, 0)
-	toastHolder.Position = UDim2.new(1, -12, 0, 12)
-	toastHolder.Size = UDim2.new(0, mobile and 300 or 280, 1, -24)
-	toastHolder.Parent = g
-	L(toastHolder, 8).HorizontalAlignment = Enum.HorizontalAlignment.Right
-end
-
-function Library:Notify(opts)
-	if typeof(opts) == "string" then opts = { Title = "KHUB", Content = opts } end
-	opts = opts or {}; ensureToast(); toastN += 1
-	local card = Instance.new("Frame")
-	card.BackgroundColor3 = T.card; card.BorderSizePixel = 0
-	card.Size = UDim2.new(1, 0, 0, 0); card.AutomaticSize = Enum.AutomaticSize.Y
-	card.LayoutOrder = toastN; card.Parent = toastHolder
-	C(card, 10); S(card, T.accent, 1, 0.35); P(card, 10, 10, 12, 12)
-	local bar = Instance.new("Frame")
-	bar.BackgroundColor3 = T.accent; bar.Size = UDim2.new(0, 3, 1, 0); bar.BorderSizePixel = 0; bar.Parent = card; C(bar, 2)
-	local title = Instance.new("TextLabel")
-	title.BackgroundTransparency = 1; title.Size = UDim2.new(1, -6, 0, 18)
-	title.Font = FB; title.Text = tostring(opts.Title or "KHUB"); title.TextColor3 = T.text
-	title.TextSize = 14; title.TextXAlignment = Enum.TextXAlignment.Left; title.Parent = card
-	local body = Instance.new("TextLabel")
-	body.BackgroundTransparency = 1; body.Size = UDim2.new(1, -6, 0, 0); body.AutomaticSize = Enum.AutomaticSize.Y
-	body.Position = UDim2.fromOffset(0, 18); body.Font = FONT; body.Text = tostring(opts.Content or "")
-	body.TextColor3 = T.dim; body.TextSize = 12; body.TextXAlignment = Enum.TextXAlignment.Left
-	body.TextWrapped = true; body.Parent = card
-	task.delay(tonumber(opts.Duration) or 2.5, function() if card.Parent then card:Destroy() end end)
-end
-
-function Library:SetTheme(_) end -- stub (Rexx compat)
-
-function Library:CreateWindow(cfg)
-	cfg = cfg or {}
-	local title = tostring(cfg.Title or cfg.Name or "KHUB")
-	local keybind = cfg.Keybind or Enum.KeyCode.RightShift
-	local size = cfg.Size or UDim2.fromOffset(mobile and 340 or 620, mobile and 440 or 480)
-	local W, H = size.X.Offset, size.Y.Offset
-	if W < 100 then W = mobile and 340 or 620 end
-	if H < 100 then H = mobile and 440 or 480 end
-	local SIDE = mobile and 54 or 148
-
+local function uiNotify(title, content, success)
 	pcall(function()
-		local o = parent():FindFirstChild("KHUB_Window")
-		if o then o:Destroy() end
+		Window:Notify({
+			Title = title or "KHUB",
+			Content = content or "",
+			Type = success and "Success" or "Warning",
+			Duration = 3,
+		})
 	end)
-
-	local sg = Instance.new("ScreenGui")
-	sg.Name = "KHUB_Window"; sg.ResetOnSpawn = false; sg.IgnoreGuiInset = true
-	sg.DisplayOrder = 100000; sg.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-	sg.Parent = parent()
-
-	local main = Instance.new("Frame")
-	main.Name = "Main"; main.Size = UDim2.fromOffset(W, H)
-	main.Position = UDim2.new(0.5, -W/2, 0.5, -H/2)
-	main.BackgroundColor3 = T.bg; main.BorderSizePixel = 0; main.Active = true
-	main.Parent = sg; C(main, 12); S(main, T.stroke, 1, 0.35)
-
-	-- top bar (Rexx-like)
-	local top = Instance.new("Frame")
-	top.Size = UDim2.new(1, 0, 0, 48); top.BackgroundColor3 = T.top; top.BorderSizePixel = 0; top.Parent = main; C(top, 12)
-	local topFill = Instance.new("Frame")
-	topFill.Size = UDim2.new(1, 0, 0, 16); topFill.Position = UDim2.new(0, 0, 1, -16)
-	topFill.BackgroundColor3 = T.top; topFill.BorderSizePixel = 0; topFill.Parent = top
-
-	local logoBox = Instance.new("Frame")
-	logoBox.Size = UDim2.fromOffset(34, 34); logoBox.Position = UDim2.fromOffset(10, 7)
-	logoBox.BackgroundColor3 = T.card; logoBox.BorderSizePixel = 0; logoBox.Parent = top; C(logoBox, 8)
-	local logoStroke = S(logoBox, T.accent, 1.5, 0.25)
-	local logo = Instance.new("ImageLabel")
-	logo.BackgroundTransparency = 1; logo.Size = UDim2.fromScale(0.8, 0.8)
-	logo.Position = UDim2.fromScale(0.1, 0.1); logo.Image = LOGO; logo.Parent = logoBox
-	-- light pulse only (low lag)
-	task.spawn(function()
-		while logoBox.Parent do
-			tw(logoStroke, { Transparency = 0.1 }, 0.8); task.wait(0.8)
-			if not logoBox.Parent then break end
-			tw(logoStroke, { Transparency = 0.55 }, 0.8); task.wait(0.8)
-		end
-	end)
-
-	local titleL = Instance.new("TextLabel")
-	titleL.BackgroundTransparency = 1; titleL.Position = UDim2.fromOffset(52, 6)
-	titleL.Size = UDim2.new(1, -120, 0, 20); titleL.Font = FB; titleL.Text = title
-	titleL.TextColor3 = T.text; titleL.TextSize = 15; titleL.TextXAlignment = Enum.TextXAlignment.Left
-	titleL.TextTruncate = Enum.TextTruncate.AtEnd; titleL.Parent = top
-	local subL = Instance.new("TextLabel")
-	subL.BackgroundTransparency = 1; subL.Position = UDim2.fromOffset(52, 26)
-	subL.Size = UDim2.new(1, -120, 0, 14); subL.Font = FONT; subL.Text = "KHUB"
-	subL.TextColor3 = T.dim; subL.TextSize = 11; subL.TextXAlignment = Enum.TextXAlignment.Left; subL.Parent = top
-
-	local close = Instance.new("TextButton")
-	close.Size = UDim2.fromOffset(30, 30); close.Position = UDim2.new(1, -38, 0, 9)
-	close.BackgroundColor3 = T.card; close.Text = "×"; close.Font = FB; close.TextSize = 18
-	close.TextColor3 = T.text; close.AutoButtonColor = false; close.Parent = top; C(close, 6)
-
-	-- drag
-	do
-		local drag, s0, p0
-		top.InputBegan:Connect(function(i)
-			if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
-				drag = true; s0 = i.Position; p0 = main.Position
-				i.Changed:Connect(function() if i.UserInputState == Enum.UserInputState.End then drag = false end end)
-			end
-		end)
-		UserInputService.InputChanged:Connect(function(i)
-			if drag and (i.UserInputType == Enum.UserInputType.MouseMovement or i.UserInputType == Enum.UserInputType.Touch) then
-				local d = i.Position - s0
-				main.Position = UDim2.new(p0.X.Scale, p0.X.Offset + d.X, p0.Y.Scale, p0.Y.Offset + d.Y)
-			end
-		end)
-	end
-
-	-- sidebar
-	local side = Instance.new("ScrollingFrame")
-	side.Size = UDim2.new(0, SIDE, 1, -48); side.Position = UDim2.fromOffset(0, 48)
-	side.BackgroundColor3 = T.side; side.BorderSizePixel = 0; side.ScrollBarThickness = 2
-	side.ScrollBarImageColor3 = T.accent; side.CanvasSize = UDim2.new(0, 0, 0, 0)
-	side.AutomaticCanvasSize = Enum.AutomaticSize.Y; side.Parent = main
-	P(side, 8, 8, 6, 6); L(side, 4)
-
-	local content = Instance.new("Frame")
-	content.Size = UDim2.new(1, -SIDE - 6, 1, -54); content.Position = UDim2.fromOffset(SIDE + 3, 50)
-	content.BackgroundTransparency = 1; content.Parent = main
-
-	-- orb
-	local orb = Instance.new("ImageButton")
-	orb.Size = UDim2.fromOffset(mobile and 48 or 44, mobile and 48 or 44)
-	orb.Position = UDim2.new(0, 14, 0.5, -22); orb.BackgroundColor3 = T.card
-	orb.Image = LOGO; orb.ScaleType = Enum.ScaleType.Fit; orb.Visible = false; orb.Parent = sg
-	C(orb, 24); S(orb, T.accent, 2, 0.25)
-
-	local function setVis(on)
-		main.Visible = on; orb.Visible = not on
-	end
-	close.MouseButton1Click:Connect(function() setVis(false) end)
-	orb.MouseButton1Click:Connect(function() setVis(true) end)
-
-	do
-		local drag, s0, p0
-		orb.InputBegan:Connect(function(i)
-			if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
-				drag = true; s0 = i.Position; p0 = orb.Position
-				i.Changed:Connect(function() if i.UserInputState == Enum.UserInputState.End then drag = false end end)
-			end
-		end)
-		UserInputService.InputChanged:Connect(function(i)
-			if drag and (i.UserInputType == Enum.UserInputType.MouseMovement or i.UserInputType == Enum.UserInputType.Touch) then
-				local d = i.Position - s0
-				orb.Position = UDim2.new(p0.X.Scale, p0.X.Offset + d.X, p0.Y.Scale, p0.Y.Offset + d.Y)
-			end
-		end)
-	end
-
-	UserInputService.InputBegan:Connect(function(i, gp)
-		if gp then return end
-		if i.KeyCode == keybind or i.KeyCode == Enum.KeyCode.RightControl or i.KeyCode == Enum.KeyCode.K then
-			setVis(not main.Visible)
-		end
-	end)
-
-	local Window = { _tabs = {}, _pages = {}, _cur = nil, Flags = {} }
-	function Window:Notify(o) return Library:Notify(o) end
-	function Window:Destroy() pcall(function() sg:Destroy() end) end
-	function Window:SaveConfig() end
-	function Window:LoadConfig() end
-
-	local function switch(name)
-		for id, p in pairs(Window._pages) do p.Visible = (id == name) end
-		for id, b in pairs(Window._tabs) do
-			local on = id == name
-			b.BackgroundColor3 = on and T.accent or T.card
-			b.BackgroundTransparency = on and 0.2 or 0.4
-			local ind = b:FindFirstChild("Ind")
-			if ind then ind.BackgroundTransparency = on and 0 or 1 end
-		end
-		Window._cur = name
-	end
-
-	local function makeTab(cfg)
-		cfg = cfg or {}
-		local name = tostring(cfg.Name or cfg.Title or "Tab")
-		local icon = ICONS[tostring(cfg.Icon or "star"):lower()] or ICONS.star
-
-		local btn = Instance.new("TextButton")
-		btn.Name = name; btn.Size = UDim2.new(1, 0, 0, mobile and 44 or 38)
-		btn.BackgroundColor3 = T.card; btn.BackgroundTransparency = 0.4
-		btn.BorderSizePixel = 0; btn.Text = ""; btn.AutoButtonColor = false; btn.Parent = side; C(btn, 8)
-
-		local ind = Instance.new("Frame")
-		ind.Name = "Ind"; ind.Size = UDim2.new(0, 3, 0.55, 0); ind.Position = UDim2.new(1, -5, 0.225, 0)
-		ind.BackgroundColor3 = Color3.new(1,1,1); ind.BackgroundTransparency = 1; ind.BorderSizePixel = 0
-		ind.Parent = btn; C(ind, 2)
-
-		local ic = Instance.new("ImageLabel")
-		ic.Size = UDim2.fromOffset(18, 18); ic.Position = UDim2.fromOffset(10, mobile and 13 or 10)
-		ic.BackgroundTransparency = 1; ic.Image = icon; ic.ImageColor3 = T.text; ic.Parent = btn
-
-		if not mobile then
-			local tl = Instance.new("TextLabel")
-			tl.BackgroundTransparency = 1; tl.Position = UDim2.fromOffset(34, 0)
-			tl.Size = UDim2.new(1, -40, 1, 0); tl.Font = FM; tl.Text = name
-			tl.TextColor3 = T.text; tl.TextSize = 12; tl.TextXAlignment = Enum.TextXAlignment.Left
-			tl.TextTruncate = Enum.TextTruncate.AtEnd; tl.Parent = btn
-		end
-
-		local page = Instance.new("ScrollingFrame")
-		page.Name = name; page.Size = UDim2.fromScale(1, 1); page.BackgroundTransparency = 1
-		page.BorderSizePixel = 0; page.ScrollBarThickness = 3; page.ScrollBarImageColor3 = T.accent
-		page.AutomaticCanvasSize = Enum.AutomaticSize.Y; page.CanvasSize = UDim2.new(0, 0, 0, 0)
-		page.Visible = false; page.Parent = content; P(page, 4, 10, 4, 6); L(page, 6)
-
-		Window._tabs[name] = btn; Window._pages[name] = page
-		btn.MouseButton1Click:Connect(function() switch(name) end)
-
-		local Tab = { Name = name }
-
-		function Tab:AddMessages(lines)
-			if typeof(lines) == "string" then lines = { lines } end
-			if typeof(lines) ~= "table" or #lines == 0 then return self end
-			pcall(function() local o = page:FindFirstChild("KHUBMessages"); if o then o:Destroy() end end)
-			local box = Instance.new("Frame")
-			box.Name = "KHUBMessages"; box.BackgroundColor3 = Color3.fromRGB(18, 16, 28)
-			box.BackgroundTransparency = 0.15; box.BorderSizePixel = 0
-			box.Size = UDim2.new(1, 0, 0, 0); box.AutomaticSize = Enum.AutomaticSize.Y
-			box.LayoutOrder = -100; box.Parent = page; C(box, 8); S(box, T.green, 1, 0.45)
-			P(box, 8, 8, 10, 8); L(box, 2)
-			for i, raw in ipairs(lines) do
-				local text = tostring(raw or ""); local col = T.green; local body = text
-				if text:sub(1, 2) == "<>" then col = T.green; body = text:sub(3):gsub("^%s+", "")
-				elseif text:sub(1, 1) == "$" then col = T.violet; body = text:sub(2):gsub("^%s+", "")
-				elseif text:sub(1, 1) == ">" then col = T.blue; body = text:sub(2):gsub("^%s+", "") end
-				if i == 2 then
-					local sep = Instance.new("Frame"); sep.BackgroundColor3 = T.green
-					sep.BackgroundTransparency = 0.7; sep.BorderSizePixel = 0
-					sep.Size = UDim2.new(1, 0, 0, 1); sep.LayoutOrder = 1; sep.Parent = box
-				end
-				local lb = Instance.new("TextLabel")
-				lb.BackgroundTransparency = 1; lb.Size = UDim2.new(1, 0, 0, 0)
-				lb.AutomaticSize = Enum.AutomaticSize.Y; lb.Font = FONT; lb.Text = body
-				lb.TextColor3 = col; lb.TextSize = 12; lb.TextXAlignment = Enum.TextXAlignment.Left
-				lb.TextWrapped = true; lb.LayoutOrder = (i == 1) and 0 or (i + 1); lb.Parent = box
-			end
-			return self
-		end
-
-		function Tab:Section(text)
-			local s = Instance.new("TextLabel")
-			s.BackgroundTransparency = 1; s.Size = UDim2.new(1, 0, 0, 20); s.Font = FB
-			s.Text = string.upper(tostring(text or "")); s.TextColor3 = T.accent; s.TextSize = 11
-			s.TextXAlignment = Enum.TextXAlignment.Left; s.Parent = page
-		end
-
-		local function card()
-			local f = Instance.new("Frame")
-			f.BackgroundColor3 = T.card; f.BackgroundTransparency = 0.1; f.BorderSizePixel = 0
-			f.Size = UDim2.new(1, 0, 0, 42); f.Parent = page; C(f, 8); return f
-		end
-
-		function Tab:Toggle(opts)
-			opts = opts or {}
-			local name = tostring(opts.Name or "Toggle")
-			local value = opts.CurrentValue == true
-			local f = card()
-			local lb = Instance.new("TextLabel")
-			lb.BackgroundTransparency = 1; lb.Position = UDim2.fromOffset(12, 0)
-			lb.Size = UDim2.new(1, -70, 1, 0); lb.Font = FM; lb.Text = name
-			lb.TextColor3 = T.text; lb.TextSize = 13; lb.TextXAlignment = Enum.TextXAlignment.Left; lb.Parent = f
-			local track = Instance.new("Frame")
-			track.Size = UDim2.fromOffset(42, 22); track.Position = UDim2.new(1, -54, 0.5, -11)
-			track.BackgroundColor3 = value and T.on or T.off; track.BorderSizePixel = 0; track.Parent = f; C(track, 11)
-			local knob = Instance.new("Frame")
-			knob.Size = UDim2.fromOffset(16, 16); knob.Position = UDim2.new(0, value and 23 or 3, 0.5, -8)
-			knob.BackgroundColor3 = T.text; knob.BorderSizePixel = 0; knob.Parent = track; C(knob, 8)
-			local hit = Instance.new("TextButton")
-			hit.Size = UDim2.fromScale(1, 1); hit.BackgroundTransparency = 1; hit.Text = ""; hit.Parent = f
-			local function set(v, silent)
-				value = v == true
-				tw(track, { BackgroundColor3 = value and T.on or T.off }, 0.12)
-				tw(knob, { Position = UDim2.new(0, value and 23 or 3, 0.5, -8) }, 0.12)
-				if opts.Flag then Window.Flags[opts.Flag] = value end
-				if not silent then
-					pcall(function() if opts.Callback then opts.Callback(value) end end)
-					Library:Notify({ Title = name, Content = value and "Enabled" or "Disabled", Duration = 2 })
-				end
-			end
-			hit.MouseButton1Click:Connect(function() set(not value) end)
-			if opts.Flag then Window.Flags[opts.Flag] = value end
-			return { Set = function(_, v) set(v, true) end }
-		end
-
-		function Tab:Slider(opts)
-			opts = opts or {}
-			local name = tostring(opts.Name or "Slider")
-			local min = tonumber(opts.Min) or 0; local max = tonumber(opts.Max) or 100
-			local step = tonumber(opts.Increment) or 1
-			local value = math.clamp(tonumber(opts.Default) or min, min, max)
-			local f = Instance.new("Frame")
-			f.BackgroundColor3 = T.card; f.BackgroundTransparency = 0.1; f.BorderSizePixel = 0
-			f.Size = UDim2.new(1, 0, 0, 58); f.Parent = page; C(f, 8)
-			local lb = Instance.new("TextLabel")
-			lb.BackgroundTransparency = 1; lb.Position = UDim2.fromOffset(12, 6)
-			lb.Size = UDim2.new(1, -70, 0, 18); lb.Font = FM; lb.Text = name
-			lb.TextColor3 = T.text; lb.TextSize = 13; lb.TextXAlignment = Enum.TextXAlignment.Left; lb.Parent = f
-			local vl = Instance.new("TextLabel")
-			vl.BackgroundTransparency = 1; vl.Position = UDim2.new(1, -58, 0, 6)
-			vl.Size = UDim2.fromOffset(48, 18); vl.Font = FB; vl.Text = tostring(value)
-			vl.TextColor3 = T.accent; vl.TextSize = 13; vl.TextXAlignment = Enum.TextXAlignment.Right; vl.Parent = f
-			local bar = Instance.new("Frame")
-			bar.Size = UDim2.new(1, -24, 0, 6); bar.Position = UDim2.fromOffset(12, 38)
-			bar.BackgroundColor3 = T.off; bar.BorderSizePixel = 0; bar.Parent = f; C(bar, 3)
-			local fill = Instance.new("Frame")
-			fill.Size = UDim2.new((value - min) / math.max(max - min, 1), 0, 1, 0)
-			fill.BackgroundColor3 = T.accent; fill.BorderSizePixel = 0; fill.Parent = bar; C(fill, 3)
-			local function set(v, silent)
-				v = math.clamp(tonumber(v) or min, min, max)
-				if step > 0 then v = math.floor(v / step + 0.5) * step end
-				value = v; fill.Size = UDim2.new((value - min) / math.max(max - min, 1), 0, 1, 0)
-				vl.Text = tostring(value)
-				if opts.Flag then Window.Flags[opts.Flag] = value end
-				if not silent and opts.Callback then pcall(opts.Callback, value) end
-			end
-			local sliding = false
-			bar.InputBegan:Connect(function(i)
-				if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
-					sliding = true
-					local rel = math.clamp((i.Position.X - bar.AbsolutePosition.X) / math.max(bar.AbsoluteSize.X, 1), 0, 1)
-					set(min + (max - min) * rel)
-				end
-			end)
-			UserInputService.InputEnded:Connect(function(i)
-				if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then sliding = false end
-			end)
-			UserInputService.InputChanged:Connect(function(i)
-				if not sliding then return end
-				if i.UserInputType == Enum.UserInputType.MouseMovement or i.UserInputType == Enum.UserInputType.Touch then
-					local rel = math.clamp((i.Position.X - bar.AbsolutePosition.X) / math.max(bar.AbsoluteSize.X, 1), 0, 1)
-					set(min + (max - min) * rel)
-				end
-			end)
-			if opts.Flag then Window.Flags[opts.Flag] = value end
-			return { Set = function(_, v) set(v, true) end }
-		end
-
-		function Tab:Dropdown(opts)
-			opts = opts or {}
-			local name = tostring(opts.Name or "Dropdown")
-			local options = opts.Options or opts.Values or {}
-			local current = opts.CurrentOption or opts.Default or options[1]
-			local open = false
-			local f = Instance.new("Frame")
-			f.BackgroundColor3 = T.card; f.BackgroundTransparency = 0.1; f.BorderSizePixel = 0
-			f.Size = UDim2.new(1, 0, 0, 42); f.ClipsDescendants = true; f.Parent = page; C(f, 8)
-			local lb = Instance.new("TextLabel")
-			lb.BackgroundTransparency = 1; lb.Position = UDim2.fromOffset(12, 0)
-			lb.Size = UDim2.new(0.42, 0, 0, 42); lb.Font = FM; lb.Text = name
-			lb.TextColor3 = T.text; lb.TextSize = 13; lb.TextXAlignment = Enum.TextXAlignment.Left; lb.Parent = f
-			local pick = Instance.new("TextButton")
-			pick.Size = UDim2.new(0.52, -12, 0, 28); pick.Position = UDim2.new(0.48, 0, 0, 7)
-			pick.BackgroundColor3 = T.off; pick.Text = tostring(current or "Select")
-			pick.TextColor3 = T.text; pick.Font = FONT; pick.TextSize = 12; pick.AutoButtonColor = false
-			pick.Parent = f; C(pick, 6)
-			local lf = Instance.new("Frame")
-			lf.BackgroundColor3 = T.top; lf.BorderSizePixel = 0; lf.Position = UDim2.fromOffset(10, 42)
-			lf.Size = UDim2.new(1, -20, 0, 0); lf.Visible = false; lf.Parent = f; C(lf, 6); L(lf, 2); P(lf, 4, 4, 4, 4)
-			local function rebuild()
-				for _, c in ipairs(lf:GetChildren()) do if c:IsA("TextButton") then c:Destroy() end end
-				for _, opt in ipairs(options) do
-					local b = Instance.new("TextButton")
-					b.Size = UDim2.new(1, 0, 0, 26); b.BackgroundColor3 = T.card
-					b.BackgroundTransparency = 0.2; b.Text = tostring(opt); b.TextColor3 = T.text
-					b.Font = FONT; b.TextSize = 12; b.AutoButtonColor = false; b.Parent = lf; C(b, 4)
-					b.MouseButton1Click:Connect(function()
-						current = opt; pick.Text = tostring(opt); open = false; lf.Visible = false
-						f.Size = UDim2.new(1, 0, 0, 42)
-						pcall(function() if opts.Callback then opts.Callback(opt) end end)
-						Library:Notify({ Title = name, Content = tostring(opt), Duration = 2 })
-					end)
-				end
-			end
-			rebuild()
-			pick.MouseButton1Click:Connect(function()
-				open = not open; lf.Visible = open
-				if open then
-					local h = math.min(8, #options) * 28 + 8
-					lf.Size = UDim2.new(1, -20, 0, h); f.Size = UDim2.new(1, 0, 0, 42 + h + 4)
-				else f.Size = UDim2.new(1, 0, 0, 42) end
-			end)
-			return { Set = function(_, v) current = v; pick.Text = tostring(v) end }
-		end
-
-		function Tab:Button(opts)
-			opts = opts or {}
-			local name = tostring(opts.Name or "Button")
-			local f = card()
-			local b = Instance.new("TextButton")
-			b.Size = UDim2.fromScale(1, 1); b.BackgroundTransparency = 1; b.Text = name
-			b.TextColor3 = T.text; b.Font = FM; b.TextSize = 13; b.Parent = f
-			b.MouseButton1Click:Connect(function()
-				tw(f, { BackgroundColor3 = T.accent }, 0.08)
-				task.delay(0.1, function() if f.Parent then tw(f, { BackgroundColor3 = T.card }, 0.18) end end)
-				pcall(function() if opts.Callback then opts.Callback() end end)
-				Library:Notify({ Title = name, Content = "Clicked", Duration = 2 })
-			end)
-		end
-
-		function Tab:Label(opts)
-			opts = opts or {}
-			local lb = Instance.new("TextLabel")
-			lb.BackgroundTransparency = 1; lb.Size = UDim2.new(1, 0, 0, 18); lb.Font = FONT
-			lb.Text = tostring(opts.Text or ""); lb.TextColor3 = T.dim; lb.TextSize = 12
-			lb.TextXAlignment = Enum.TextXAlignment.Left; lb.Parent = page
-		end
-
-		function Tab:Paragraph(opts)
-			opts = opts or {}
-			local f = Instance.new("Frame")
-			f.BackgroundColor3 = T.card; f.BackgroundTransparency = 0.15; f.BorderSizePixel = 0
-			f.Size = UDim2.new(1, 0, 0, 0); f.AutomaticSize = Enum.AutomaticSize.Y; f.Parent = page
-			C(f, 8); P(f, 10, 10, 12, 12); L(f, 4)
-			local t = Instance.new("TextLabel")
-			t.BackgroundTransparency = 1; t.Size = UDim2.new(1, 0, 0, 18); t.Font = FB
-			t.Text = tostring(opts.Title or ""); t.TextColor3 = T.text; t.TextSize = 13
-			t.TextXAlignment = Enum.TextXAlignment.Left; t.Parent = f
-			local c = Instance.new("TextLabel")
-			c.BackgroundTransparency = 1; c.Size = UDim2.new(1, 0, 0, 0); c.AutomaticSize = Enum.AutomaticSize.Y
-			c.Font = FONT; c.Text = tostring(opts.Content or ""); c.TextColor3 = T.dim; c.TextSize = 12
-			c.TextXAlignment = Enum.TextXAlignment.Left; c.TextWrapped = true; c.Parent = f
-		end
-
-		if not Window._cur then switch(name) end
-		return Tab
-	end
-
-	function Window:Tab(cfg) return makeTab(cfg) end
-	function Window:AddTab(cfg)
-		cfg = cfg or {}; cfg.Name = cfg.Name or cfg.Title; return makeTab(cfg)
-	end
-
-	print("[KHUB UI] Loaded · Timebomb/Rexx-style API · less lag")
-	return Window
 end
 
-print("[KHUB UI Library] Ready")
-return Library
+local TabWelcome = Window:Tab({ Name = "Welcome", Icon = "home" })
+local TabMain    = Window:Tab({ Name = "Main", Icon = "zap" })
+local TabServer  = Window:Tab({ Name = "Server", Icon = "server" })
+
+do
+	TabWelcome:Section("INFO")
+	TabWelcome:Paragraph({
+		Title = "KHUB",
+		Content = "Script by Kyiel Pambid\nToggle: RightShift",
+	})
+	TabWelcome:Button({
+		Name = "Copy Discord",
+		Callback = function()
+			pcall(function()
+				if setclipboard then setclipboard("https://discord.gg/CTqBhzTGHV") end
+			end)
+			uiNotify("Copied", "Discord", true)
+		end,
+	})
+end
+
+do
+	TabMain:Section("FEATURES")
+	TabMain:Toggle({
+		Name = "Example",
+		CurrentValue = false,
+		Flag = "Example",
+		Callback = function(v) end,
+	})
+end
+
+do
+	TabServer:Section("LINKS")
+	TabServer:Button({
+		Name = "Copy YouTube",
+		Callback = function()
+			pcall(function()
+				if setclipboard then setclipboard("https://www.youtube.com/@kyielpambid") end
+			end)
+			uiNotify("Copied", "YouTube", true)
+		end,
+	})
+end
+
+uiNotify("KHUB", "Loaded", true)
+print("[KHUB] Loaded · Toggle: RightShift")
+```
+
+---
+
+## 7. RULES FOR OTHER AI
+
+1. **Always** run KHUB intro before UI (with SKIP).
+2. **Always** use Rexx loader: `carbonpanel.../script=48`.
+3. Window **Title** = game name (`KHUB · GameName`).
+4. Create **all tabs first**, then fill with `do ... end`.
+5. Use **Flag** on every Toggle / Slider / Dropdown.
+6. Use **uiNotify** for feedback.
+7. Default toggle key: **RightShift**.
+8. Branding: **Kyiel Pambid / KHUB** only — no other hub names.
+9. Discord: `https://discord.gg/CTqBhzTGHV`
+10. YouTube: `https://www.youtube.com/@kyielpambid`
+
+---
+
+## 8. Config (if available)
+
+```lua
+if Window.SaveConfig then Window:SaveConfig("default") end
+if Window.LoadConfig then Window:LoadConfig("default") end
+```
